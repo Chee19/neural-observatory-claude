@@ -279,11 +279,11 @@ export function SessionsTable({
                   </td>
                   <td className="border-b border-gray-700 px-2 py-2 text-gray-100">
                     {session.peakContextPct === null
-                      ? "N/A"
+                      ? "-"
                       : `${session.peakContextPct.toFixed(1)}%`}
                   </td>
                   <td className="border-b border-gray-700 px-2 py-2 text-gray-100">
-                    {formatCurrency(session.knownCostUsd)}
+                    {formatCurrency(session.knownCostUsd) === "N/A" ? "-" : formatCurrency(session.knownCostUsd)}
                   </td>
                   <td className="border-b border-gray-700 px-2 py-2">
                     {eff.metrics.some((m) => m.available) ? (

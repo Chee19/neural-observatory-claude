@@ -287,7 +287,7 @@ export default function DashboardPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-gray-900/60 via-gray-900/80 to-gray-900" />
       </div>
-      <div className="mx-auto max-w-7xl px-5 pb-14 pt-10 md:pl-24 md:pr-6 lg:pl-28 lg:pr-8 xl:px-5 sm:px-4 sm:pt-6">
+      <div className="mx-auto max-w-7xl px-5 pb-14 pt-10 sm:px-4 sm:pt-6 md:pl-40 md:pr-6 lg:pl-40 lg:pr-8">
       <section id="home" className="flex scroll-mt-4 flex-col items-start justify-between gap-5 rounded-2xl border border-gray-700 bg-gray-800 p-5 md:flex-row">
         <div>
           <p className="m-0 text-xs font-bold uppercase tracking-wider text-green-400">Claude Usage Inspector</p>

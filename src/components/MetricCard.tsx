@@ -14,7 +14,7 @@ export function MetricCard({ label, value, hint, onClick, right }: MetricCardPro
     <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 text-xl md:text-2xl font-extrabold leading-tight  text-gray-100 break-words">
-          {value}
+          {value === 'N/A' ? '-' : value}
         </div>
         {right}
       </div>

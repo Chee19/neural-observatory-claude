@@ -439,36 +439,36 @@ export function gradeClasses(grade: string): {
 } {
   if (grade === "A+" || grade === "A")
     return {
-      bg: "bg-emerald-500/15",
-      text: "text-emerald-300",
-      border: "border-emerald-400/40",
+      bg: "bg-gray-800",
+      text: "text-emerald-400",
+      border: "border-emerald-400/60",
       bar: "bg-emerald-400",
     };
   if (grade === "B+" || grade === "B")
     return {
-      bg: "bg-green-500/15",
-      text: "text-green-300",
-      border: "border-green-400/40",
+      bg: "bg-gray-800",
+      text: "text-green-400",
+      border: "border-green-400/60",
       bar: "bg-green-400",
     };
   if (grade === "C+" || grade === "C")
     return {
-      bg: "bg-yellow-500/15",
-      text: "text-yellow-300",
-      border: "border-yellow-400/40",
+      bg: "bg-gray-800",
+      text: "text-yellow-400",
+      border: "border-yellow-400/60",
       bar: "bg-yellow-400",
     };
   if (grade === "D")
     return {
-      bg: "bg-orange-500/15",
-      text: "text-orange-300",
-      border: "border-orange-400/40",
+      bg: "bg-gray-800",
+      text: "text-orange-400",
+      border: "border-orange-500/60",
       bar: "bg-orange-400",
     };
   return {
-    bg: "bg-red-500/15",
-    text: "text-red-300",
-    border: "border-red-400/40",
+    bg: "bg-gray-800",
+    text: "text-red-400",
+    border: "border-red-500/60",
     bar: "bg-red-500",
   };
 }
