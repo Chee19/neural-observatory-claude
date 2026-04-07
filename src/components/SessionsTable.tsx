@@ -17,7 +17,7 @@ interface RangeOption {
   label: string;
   min?: number;
   max?: number;
-  nullOnly?: boolean;    // match rows where the value is null
+  nullOnly?: boolean; // match rows where the value is null
   includeNull?: boolean; // "Any" — pass through regardless
 }
 
@@ -77,14 +77,39 @@ function matchesRange(value: number | null, opt: RangeOption): boolean {
 
 type FilterKey = "prompts" | "peakCtx" | "context" | "cost" | "score";
 
-const FILTER_CONFIG: { key: FilterKey; label: string; ranges: RangeOption[] }[] =
-  [
-    { key: "prompts", label: "Prompts", ranges: PROMPT_RANGES },
-    { key: "peakCtx", label: "Peak Ctx", ranges: PEAK_CTX_RANGES },
-    { key: "context", label: "Context", ranges: CONTEXT_RANGES },
-    { key: "cost", label: "Known Cost", ranges: COST_RANGES },
-    { key: "score", label: "Score", ranges: SCORE_RANGES },
-  ];
+type SortKey =
+  | "endedAt"
+  | "promptCount"
+  | "inputTokens"
+  | "outputTokens"
+  | "totalContextTokens"
+  | "peakContextPct"
+  | "knownCostUsd"
+  | "score";
+
+const COLUMN_CONFIG: { label: string; sortKey: SortKey | null }[] = [
+  { label: "When", sortKey: "endedAt" },
+  { label: "Project", sortKey: null },
+  { label: "Prompts", sortKey: "promptCount" },
+  { label: "Input", sortKey: "inputTokens" },
+  { label: "Output", sortKey: "outputTokens" },
+  { label: "Context", sortKey: "totalContextTokens" },
+  { label: "Peak Ctx", sortKey: "peakContextPct" },
+  { label: "Known Cost", sortKey: "knownCostUsd" },
+  { label: "Approx. Score", sortKey: "score" },
+];
+
+const FILTER_CONFIG: {
+  key: FilterKey;
+  label: string;
+  ranges: RangeOption[];
+}[] = [
+  { key: "prompts", label: "Prompts", ranges: PROMPT_RANGES },
+  { key: "peakCtx", label: "Peak Ctx", ranges: PEAK_CTX_RANGES },
+  { key: "context", label: "Context", ranges: CONTEXT_RANGES },
+  { key: "cost", label: "Known Cost", ranges: COST_RANGES },
+  { key: "score", label: "Approx. Score", ranges: SCORE_RANGES },
+];
 
 export interface SessionsTableProps {
   sessions: SessionMetrics[];
@@ -107,47 +132,89 @@ export function SessionsTable({
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [selectedSession, setSelectedSession] = useState<SessionMetrics | null>(null);
-  const [projectLogDetails, setProjectLogDetails] = useState<SessionProjectLogDetails | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    null,
+  );
+  const [selectedSession, setSelectedSession] = useState<SessionMetrics | null>(
+    null,
+  );
+  const [projectLogDetails, setProjectLogDetails] =
+    useState<SessionProjectLogDetails | null>(null);
   const detailsRequestIdRef = useRef(0);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const [activeFilters, setActiveFilters] = useState<Record<FilterKey, number>>({
-    prompts: 0,
-    peakCtx: 0,
-    context: 0,
-    cost: 0,
-    score: 0,
-  });
+  const [sortKey, setSortKey] = useState<SortKey>("endedAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // Pre-compute scores once so the filter memo can reference them
+  const [activeFilters, setActiveFilters] = useState<Record<FilterKey, number>>(
+    {
+      prompts: 0,
+      peakCtx: 0,
+      context: 0,
+      cost: 0,
+      score: 0,
+    },
+  );
+
+  // Pre-compute full EfficiencyScore once per sessions change.
+  // Reused by filter, sort, and row render — avoids recomputing 9 sub-scorers per row on every render.
   const sessionScores = useMemo(
-    () => new Map(sessions.map((s) => [s.sessionId, computeEfficiencyScore(s).total])),
+    () =>
+      new Map(sessions.map((s) => [s.sessionId, computeEfficiencyScore(s)])),
     [sessions],
   );
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
-      if (!matchesRange(s.promptCount, PROMPT_RANGES[activeFilters.prompts])) return false;
-      if (!matchesRange(s.peakContextPct, PEAK_CTX_RANGES[activeFilters.peakCtx])) return false;
-      if (!matchesRange(s.totalContextTokens, CONTEXT_RANGES[activeFilters.context])) return false;
-      if (!matchesRange(s.knownCostUsd, COST_RANGES[activeFilters.cost])) return false;
-      const score = sessionScores.get(s.sessionId) ?? null;
+      if (!matchesRange(s.promptCount, PROMPT_RANGES[activeFilters.prompts]))
+        return false;
+      if (
+        !matchesRange(s.peakContextPct, PEAK_CTX_RANGES[activeFilters.peakCtx])
+      )
+        return false;
+      if (
+        !matchesRange(
+          s.totalContextTokens,
+          CONTEXT_RANGES[activeFilters.context],
+        )
+      )
+        return false;
+      if (!matchesRange(s.knownCostUsd, COST_RANGES[activeFilters.cost]))
+        return false;
+      const score = sessionScores.get(s.sessionId)?.total ?? null;
       if (!matchesRange(score, SCORE_RANGES[activeFilters.score])) return false;
       return true;
     });
   }, [sessions, activeFilters, sessionScores]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredSessions.length / pageSize));
+  const sortedSessions = useMemo(() => {
+    return [...filteredSessions].sort((a, b) => {
+      const aVal =
+        sortKey === "score"
+          ? (sessionScores.get(a.sessionId)?.total ?? null)
+          : (a[sortKey] as number | null);
+      const bVal =
+        sortKey === "score"
+          ? (sessionScores.get(b.sessionId)?.total ?? null)
+          : (b[sortKey] as number | null);
+
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      const diff = aVal - bVal;
+      return sortDir === "asc" ? diff : -diff;
+    });
+  }, [filteredSessions, sortKey, sortDir, sessionScores]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedSessions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
 
   const pagedSessions = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredSessions.slice(start, start + pageSize);
-  }, [currentPage, pageSize, filteredSessions]);
+    return sortedSessions.slice(start, start + pageSize);
+  }, [currentPage, pageSize, sortedSessions]);
 
   function setFilter(key: FilterKey, idx: number) {
     setActiveFilters((prev) => ({ ...prev, [key]: idx }));
@@ -156,6 +223,16 @@ export function SessionsTable({
 
   function resetFilters() {
     setActiveFilters({ prompts: 0, peakCtx: 0, context: 0, cost: 0, score: 0 });
+    setPage(1);
+  }
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
     setPage(1);
   }
 
@@ -179,13 +256,20 @@ export function SessionsTable({
 
       if (!response.ok) {
         if (contentType.includes("application/json")) {
-          const payload = (await response.json()) as { error?: string; detail?: string };
+          const payload = (await response.json()) as {
+            error?: string;
+            detail?: string;
+          };
           throw new Error(
-            payload.detail || payload.error || `Session details API error: ${response.status}`,
+            payload.detail ||
+              payload.error ||
+              `Session details API error: ${response.status}`,
           );
         }
         const text = await response.text();
-        throw new Error(`Session details API error: ${response.status}. ${text.slice(0, 120)}`);
+        throw new Error(
+          `Session details API error: ${response.status}. ${text.slice(0, 120)}`,
+        );
       }
 
       if (!contentType.includes("application/json")) {
@@ -203,7 +287,10 @@ export function SessionsTable({
     } catch (error) {
       return {
         status: "error",
-        message: error instanceof Error ? error.message : "Unable to inspect project logs.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to inspect project logs.",
         sessionId: session.sessionId,
         projectPath: session.projectPath,
         resolvedProjectPath: null,
@@ -258,7 +345,10 @@ export function SessionsTable({
         window.setTimeout(resolve, MIN_DETAILS_LOADING_MS);
       });
 
-      const [projectDetails] = await Promise.all([projectLogPromise, minDelayPromise]);
+      const [projectDetails] = await Promise.all([
+        projectLogPromise,
+        minDelayPromise,
+      ]);
 
       if (requestId !== detailsRequestIdRef.current) return;
       setProjectLogDetails(projectDetails);
@@ -339,7 +429,10 @@ export function SessionsTable({
           Rows
           <select
             value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
           >
             <option value={10}>10</option>
@@ -377,28 +470,46 @@ export function SessionsTable({
         <table className="w-full min-w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["When", "Project", "Prompts", "Input", "Output", "Context", "Peak Ctx", "Known Cost", "Score"].map(
-                (h) => (
-                  <th
-                    key={h}
-                    className="border-b border-gray-700 px-2 py-2 text-left text-xs uppercase tracking-wide text-gray-300"
-                  >
-                    {h}
-                  </th>
-                ),
-              )}
+              {COLUMN_CONFIG.map(({ label, sortKey: colKey }) => (
+                <th
+                  key={label}
+                  className="border-b border-gray-700 px-2 py-2 text-left text-xs uppercase tracking-wide text-gray-300"
+                >
+                  {colKey ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSort(colKey)}
+                      className="inline-flex items-center gap-1 hover:text-gray-100 transition-colors"
+                    >
+                      {label}
+                      <span className="text-gray-500">
+                        {sortKey === colKey
+                          ? sortDir === "asc"
+                            ? "↑"
+                            : "↓"
+                          : "↕"}
+                      </span>
+                    </button>
+                  ) : (
+                    label
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {pagedSessions.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-2 py-6 text-center text-sm text-gray-500">
+                <td
+                  colSpan={9}
+                  className="px-2 py-6 text-center text-sm text-gray-500"
+                >
                   No sessions match the current filters.
                 </td>
               </tr>
             ) : (
               pagedSessions.map((session) => {
-                const eff = computeEfficiencyScore(session);
+                const eff = sessionScores.get(session.sessionId)!; // always present: pagedSessions ⊆ sessions
                 return (
                   <tr
                     key={session.sessionId}

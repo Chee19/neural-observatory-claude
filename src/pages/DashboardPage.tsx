@@ -277,26 +277,35 @@ export default function DashboardPage() {
   const tableSessions = viewSessions.length ? viewSessions : sessions;
   const latestSession = tableSessions[0] ?? null;
 
-  async function reload() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/metrics", {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const data = (await response.json()) as ApiMetricsResponse;
-      setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    void reload();
+    const controller = new AbortController();
+    fetch("/api/metrics", {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        return res.json() as Promise<ApiMetricsResponse>;
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setResult(data);
+        }
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   const modalData =
@@ -335,7 +344,7 @@ export default function DashboardPage() {
               Claude Usage Inspector
             </p>
             <h1 className="mb-2 mt-2 text-2xl md:text-3xl font-semibold leading-tight">
-              Auto Read-Only Token, Context and Cost Dashboard
+              Neural Observatory for LLM
             </h1>
             <p className="max-w-3xl text-sm leading-relaxed text-gray-400">
               This app auto-loads from <code>~/.claude</code> through a local
@@ -343,9 +352,9 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
-            onClick={reload}
-            className="w-full rounded-xl border border-emerald-400/30 bg-gradient-to-b from-emerald-500/20 to-gray-900/80 px-4 py-3 font-semibold text-emerald-100 shadow-[0_0_0_1px_rgba(16,185,129,0.12)] transition hover:-translate-y-px hover:border-emerald-300/50 hover:from-emerald-400/25 hover:to-gray-900/70 disabled:cursor-wait disabled:opacity-70 md:w-auto"
+            onClick={() => window.location.reload()}
             disabled={loading}
+            className="w-full rounded-xl border border-emerald-400/30 bg-gradient-to-b from-emerald-500/20 to-gray-900/80 px-4 py-3 font-semibold text-emerald-100 shadow-[0_0_0_1px_rgba(16,185,129,0.12)] transition hover:-translate-y-px hover:border-emerald-300/50 hover:from-emerald-400/25 hover:to-gray-900/70 disabled:cursor-wait disabled:opacity-70 md:w-auto"
             type="button"
           >
             {loading ? "Loading..." : "Refresh"}

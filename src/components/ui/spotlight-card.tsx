@@ -1,5 +1,103 @@
 import React, { useEffect, useRef, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 
+// ─── Singleton pointer listener (PERF-002) ────────────────────────────────────
+// One document-level listener updates all mounted GlowCard refs instead of
+// registering a separate handler per card instance.
+
+const _glowCards = new Set<HTMLDivElement>();
+let _glowListenerAttached = false;
+
+function _ensureGlowListener() {
+  if (_glowListenerAttached) return;
+  _glowListenerAttached = true;
+  document.addEventListener(
+    'pointermove',
+    (e: PointerEvent) => {
+      const x  = e.clientX.toFixed(2);
+      const xp = (e.clientX / window.innerWidth).toFixed(2);
+      const y  = e.clientY.toFixed(2);
+      const yp = (e.clientY / window.innerHeight).toFixed(2);
+      for (const card of _glowCards) {
+        card.style.setProperty('--x',  x);
+        card.style.setProperty('--xp', xp);
+        card.style.setProperty('--y',  y);
+        card.style.setProperty('--yp', yp);
+      }
+    },
+    { passive: true },
+  );
+}
+
+// ─── Singleton style injection (PERF-003) ─────────────────────────────────────
+// CSS is injected once into <head> instead of rendering a duplicate <style> tag
+// inside every GlowCard instance.
+
+const _GLOW_STYLES = `
+  [data-glow]::before,
+  [data-glow]::after {
+    pointer-events: none;
+    content: "";
+    position: absolute;
+    inset: calc(var(--border-size) * -1);
+    border: var(--border-size) solid transparent;
+    border-radius: calc(var(--radius) * 1px);
+    background-attachment: fixed;
+    background-size: calc(100% + (2 * var(--border-size))) calc(100% + (2 * var(--border-size)));
+    background-repeat: no-repeat;
+    background-position: 50% 50%;
+    mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+    mask-clip: padding-box, border-box;
+    mask-composite: intersect;
+  }
+
+  [data-glow]::before {
+    background-image: radial-gradient(
+      calc(var(--spotlight-size) * 0.75) calc(var(--spotlight-size) * 0.75) at
+      calc(var(--x, 0) * 1px)
+      calc(var(--y, 0) * 1px),
+      hsl(var(--hue, 210) calc(var(--saturation, 100) * 1%) calc(var(--lightness, 50) * 1%) / var(--border-spot-opacity, 1)), transparent 100%
+    );
+    filter: brightness(2);
+  }
+
+  [data-glow]::after {
+    background-image: radial-gradient(
+      calc(var(--spotlight-size) * 0.5) calc(var(--spotlight-size) * 0.5) at
+      calc(var(--x, 0) * 1px)
+      calc(var(--y, 0) * 1px),
+      hsl(0 100% 100% / var(--border-light-opacity, 1)), transparent 100%
+    );
+  }
+
+  [data-glow] [data-glow] {
+    position: absolute;
+    inset: 0;
+    will-change: filter;
+    opacity: var(--outer, 1);
+    border-radius: calc(var(--radius) * 1px);
+    border-width: calc(var(--border-size) * 20);
+    filter: blur(calc(var(--border-size) * 10));
+    background: none;
+    pointer-events: none;
+    border: none;
+  }
+
+  [data-glow] > [data-glow]::before {
+    inset: -10px;
+    border-width: 10px;
+  }
+`;
+
+let _glowStylesInjected = false;
+
+function _injectGlowStyles() {
+  if (_glowStylesInjected) return;
+  _glowStylesInjected = true;
+  const style = document.createElement('style');
+  style.textContent = _GLOW_STYLES;
+  document.head.appendChild(style);
+}
+
 interface GlowCardProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
@@ -39,19 +137,12 @@ const GlowCard: React.FC<GlowCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const syncPointer = (e: PointerEvent) => {
-      const { clientX: x, clientY: y } = e;
-
-      if (cardRef.current) {
-        cardRef.current.style.setProperty('--x', x.toFixed(2));
-        cardRef.current.style.setProperty('--xp', (x / window.innerWidth).toFixed(2));
-        cardRef.current.style.setProperty('--y', y.toFixed(2));
-        cardRef.current.style.setProperty('--yp', (y / window.innerHeight).toFixed(2));
-      }
-    };
-
-    document.addEventListener('pointermove', syncPointer);
-    return () => document.removeEventListener('pointermove', syncPointer);
+    _injectGlowStyles();
+    _ensureGlowListener();
+    const card = cardRef.current;
+    if (!card) return;
+    _glowCards.add(card);
+    return () => { _glowCards.delete(card); };
   }, []);
 
   const { base, spread } = glowColorMap[glowColor];
@@ -103,93 +194,34 @@ const GlowCard: React.FC<GlowCardProps> = ({
     return baseStyles;
   };
 
-  const beforeAfterStyles = `
-    [data-glow]::before,
-    [data-glow]::after {
-      pointer-events: none;
-      content: "";
-      position: absolute;
-      inset: calc(var(--border-size) * -1);
-      border: var(--border-size) solid transparent;
-      border-radius: calc(var(--radius) * 1px);
-      background-attachment: fixed;
-      background-size: calc(100% + (2 * var(--border-size))) calc(100% + (2 * var(--border-size)));
-      background-repeat: no-repeat;
-      background-position: 50% 50%;
-      mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
-      mask-clip: padding-box, border-box;
-      mask-composite: intersect;
-    }
-
-    [data-glow]::before {
-      background-image: radial-gradient(
-        calc(var(--spotlight-size) * 0.75) calc(var(--spotlight-size) * 0.75) at
-        calc(var(--x, 0) * 1px)
-        calc(var(--y, 0) * 1px),
-        hsl(var(--hue, 210) calc(var(--saturation, 100) * 1%) calc(var(--lightness, 50) * 1%) / var(--border-spot-opacity, 1)), transparent 100%
-      );
-      filter: brightness(2);
-    }
-
-    [data-glow]::after {
-      background-image: radial-gradient(
-        calc(var(--spotlight-size) * 0.5) calc(var(--spotlight-size) * 0.5) at
-        calc(var(--x, 0) * 1px)
-        calc(var(--y, 0) * 1px),
-        hsl(0 100% 100% / var(--border-light-opacity, 1)), transparent 100%
-      );
-    }
-
-    [data-glow] [data-glow] {
-      position: absolute;
-      inset: 0;
-      will-change: filter;
-      opacity: var(--outer, 1);
-      border-radius: calc(var(--radius) * 1px);
-      border-width: calc(var(--border-size) * 20);
-      filter: blur(calc(var(--border-size) * 10));
-      background: none;
-      pointer-events: none;
-      border: none;
-    }
-
-    [data-glow] > [data-glow]::before {
-      inset: -10px;
-      border-width: 10px;
-    }
-  `;
-
   const mergedStyles: GlowStyle = {
     ...getInlineStyles(),
     ...(style ?? {}),
   };
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: beforeAfterStyles }} />
-      <div
-        ref={cardRef}
-        data-glow
-        style={mergedStyles}
-        {...props}
-        className={`
-          ${getSizeClasses()}
-          ${!customSize ? 'aspect-[3/4]' : ''}
-          rounded-2xl
-          relative
-          grid
-          grid-rows-[1fr_auto]
-          shadow-[0_1rem_2rem_-1rem_black]
-          p-4
-          gap-4
-          backdrop-blur-[5px]
-          ${className}
-        `}
-      >
-        <div data-glow />
-        {children}
-      </div>
-    </>
+    <div
+      ref={cardRef}
+      data-glow
+      style={mergedStyles}
+      {...props}
+      className={`
+        ${getSizeClasses()}
+        ${!customSize ? 'aspect-[3/4]' : ''}
+        rounded-2xl
+        relative
+        grid
+        grid-rows-[1fr_auto]
+        shadow-[0_1rem_2rem_-1rem_black]
+        p-4
+        gap-4
+        backdrop-blur-[5px]
+        ${className}
+      `}
+    >
+      <div data-glow />
+      {children}
+    </div>
   );
 };
 

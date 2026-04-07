@@ -19,7 +19,7 @@ import {
 //   All dark: variants used as defaults since UI is always dark.
 
 const badgeDeltaVariants = cva(
-  "inline-flex items-center text-xs font-semibold",
+  "inline-flex items-center whitespace-nowrap text-xs font-semibold",
   {
     variants: {
       variant: {
@@ -108,7 +108,7 @@ const DeltaIcon = ({
   };
   const row = icons[deltaType] ?? icons.neutral;
   const Icon = row[iconStyle] ?? row.filled;
-  return <Icon className="-ml-0.5 size-4" aria-hidden />;
+  return <Icon className="-ml-0.5 size-3" aria-hidden />;
 };
 
 const VALID_DELTA_TYPES = new Set(["increase", "decrease", "neutral"]);

@@ -1,6 +1,6 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const MODEL_CONTEXT_WINDOWS = [
   { pattern: /claude-sonnet/i, window: 200_000 },
@@ -10,18 +10,18 @@ const MODEL_CONTEXT_WINDOWS = [
 
 const PROJECT_LOG_SCAN_FILE_LIMIT = 500;
 const PROJECT_LOG_SCAN_DIR_EXCLUDES = new Set([
-  '.git',
-  'node_modules',
-  'dist',
-  'build',
-  '.next',
-  '.cache',
-  'coverage',
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  "coverage",
 ]);
 
 function parseTimestamp(raw) {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (typeof raw === 'string') {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
     const parsed = Date.parse(raw);
     return Number.isNaN(parsed) ? null : parsed;
   }
@@ -45,7 +45,7 @@ function getContextWindow(modelName) {
 
 async function readTextIfExists(filePath) {
   try {
-    return await fs.readFile(filePath, 'utf8');
+    return await fs.readFile(filePath, "utf8");
   } catch {
     return null;
   }
@@ -76,20 +76,32 @@ async function walkFilesIfExists(dirPath) {
 
 function looksLikeLogFile(filePath) {
   const lower = path.basename(filePath).toLowerCase();
-  return lower.includes('log') || lower.endsWith('.jsonl') || lower.endsWith('.log') || lower.endsWith('.ndjson');
+  return (
+    lower.includes("log") ||
+    lower.endsWith(".jsonl") ||
+    lower.endsWith(".log") ||
+    lower.endsWith(".ndjson")
+  );
 }
 
 function looksLikeMemoryFile(filePath) {
-  return path.basename(filePath).toLowerCase().includes('memory');
+  return path.basename(filePath).toLowerCase().includes("memory");
 }
 
 async function buildInventory(claudeDir) {
-  const [agentFiles, skillFiles, pluginFiles, memoryDirFiles, logDirFiles, rootEntries] = await Promise.all([
-    walkFilesIfExists(path.join(claudeDir, 'agents')),
-    walkFilesIfExists(path.join(claudeDir, 'skills')),
-    walkFilesIfExists(path.join(claudeDir, 'plugins')),
-    walkFilesIfExists(path.join(claudeDir, 'memory')),
-    walkFilesIfExists(path.join(claudeDir, 'logs')),
+  const [
+    agentFiles,
+    skillFiles,
+    pluginFiles,
+    memoryDirFiles,
+    logDirFiles,
+    rootEntries,
+  ] = await Promise.all([
+    walkFilesIfExists(path.join(claudeDir, "agents")),
+    walkFilesIfExists(path.join(claudeDir, "skills")),
+    walkFilesIfExists(path.join(claudeDir, "plugins")),
+    walkFilesIfExists(path.join(claudeDir, "memory")),
+    walkFilesIfExists(path.join(claudeDir, "logs")),
     fs.readdir(claudeDir, { withFileTypes: true }).catch(() => []),
   ]);
 
@@ -108,7 +120,10 @@ async function buildInventory(claudeDir) {
 
   const memoryRootFiles = rootFiles.filter(looksLikeMemoryFile);
   const memoryFiles = new Set([...memoryDirFiles, ...memoryRootFiles]);
-  const logFiles = new Set([...logDirFiles, ...rootFiles.filter(looksLikeLogFile)]);
+  const logFiles = new Set([
+    ...logDirFiles,
+    ...rootFiles.filter(looksLikeLogFile),
+  ]);
 
   return {
     agents: agentFiles.length,
@@ -123,7 +138,7 @@ async function buildInventory(claudeDir) {
 function initSession(sessionId, sourceFile, isSubagent) {
   return {
     sessionId,
-    projectPath: 'unknown',
+    projectPath: "unknown",
     startedAt: null,
     endedAt: null,
     promptCount: 0,
@@ -143,18 +158,18 @@ function initSession(sessionId, sourceFile, isSubagent) {
 }
 
 function extractTextFromContent(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
 
-  let combined = '';
+  let combined = "";
   for (const item of content) {
-    if (typeof item === 'string') {
+    if (typeof item === "string") {
       combined += ` ${item}`;
       continue;
     }
-    if (!item || typeof item !== 'object') continue;
-    if (typeof item.text === 'string') combined += ` ${item.text}`;
-    if (typeof item.content === 'string') combined += ` ${item.content}`;
+    if (!item || typeof item !== "object") continue;
+    if (typeof item.text === "string") combined += ` ${item.text}`;
+    if (typeof item.content === "string") combined += ` ${item.content}`;
   }
   return combined;
 }
@@ -165,7 +180,10 @@ function toSortedNameCountArray(map) {
     .sort((a, b) => b.count - a.count);
 }
 
-async function walkProjectJsonlFiles(rootDir, limit = PROJECT_LOG_SCAN_FILE_LIMIT) {
+async function walkProjectJsonlFiles(
+  rootDir,
+  limit = PROJECT_LOG_SCAN_FILE_LIMIT,
+) {
   const out = [];
   const stack = [rootDir];
 
@@ -188,7 +206,11 @@ async function walkProjectJsonlFiles(rootDir, limit = PROJECT_LOG_SCAN_FILE_LIMI
       }
 
       if (!entry.isFile()) continue;
-      if (!entry.name.endsWith('.jsonl') || entry.name.endsWith('.jsonl.wakatime')) continue;
+      if (
+        !entry.name.endsWith(".jsonl") ||
+        entry.name.endsWith(".jsonl.wakatime")
+      )
+        continue;
 
       out.push(path.join(dir, entry.name));
       if (out.length >= limit) return { files: out, limitHit: true };
@@ -199,7 +221,7 @@ async function walkProjectJsonlFiles(rootDir, limit = PROJECT_LOG_SCAN_FILE_LIMI
 }
 
 function encodeClaudeProjectKey(projectPath) {
-  return projectPath.replace(/[\\/]/g, '-').replace(/\s+/g, '-');
+  return projectPath.replace(/[\\/]/g, "-").replace(/\s+/g, "-");
 }
 
 async function isDirectory(dirPath) {
@@ -211,7 +233,10 @@ async function isDirectory(dirPath) {
   }
 }
 
-async function collectProjectJsonlFiles(candidateDirs, limit = PROJECT_LOG_SCAN_FILE_LIMIT) {
+async function collectProjectJsonlFiles(
+  candidateDirs,
+  limit = PROJECT_LOG_SCAN_FILE_LIMIT,
+) {
   const uniqueFiles = [];
   const seen = new Set();
   let limitHit = false;
@@ -223,7 +248,10 @@ async function collectProjectJsonlFiles(candidateDirs, limit = PROJECT_LOG_SCAN_
     }
 
     const remaining = limit - uniqueFiles.length;
-    const { files, limitHit: dirLimitHit } = await walkProjectJsonlFiles(dir, remaining);
+    const { files, limitHit: dirLimitHit } = await walkProjectJsonlFiles(
+      dir,
+      remaining,
+    );
     for (const file of files) {
       if (seen.has(file)) continue;
       seen.add(file);
@@ -257,34 +285,34 @@ function extractSkillNames(text) {
   const explicit = normalized.match(/\$?[a-z0-9_-]*skill[a-z0-9_-]*/g) || [];
   for (const token of explicit) {
     if (token.length < 5) continue;
-    matches.push(token.replace(/^\$/, ''));
+    matches.push(token.replace(/^\$/, ""));
   }
 
   const pathLike = normalized.match(/\/skills\/([a-z0-9._-]+)/g) || [];
   for (const token of pathLike) {
-    const name = token.split('/').pop();
-    if (name) matches.push(name.replace(/\.md$/, ''));
+    const name = token.split("/").pop();
+    if (name) matches.push(name.replace(/\.md$/, ""));
   }
 
   return matches;
 }
 
 async function parseHistoryFile(claudeDir, sessions) {
-  const historyPath = path.join(claudeDir, 'history.jsonl');
+  const historyPath = path.join(claudeDir, "history.jsonl");
   const text = await readTextIfExists(historyPath);
   if (!text) return;
 
-  for (const line of text.split('\n')) {
+  for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     const obj = safeJsonParse(line);
-    if (!obj || typeof obj !== 'object') continue;
+    if (!obj || typeof obj !== "object") continue;
 
-    const sessionId = typeof obj.sessionId === 'string' ? obj.sessionId : null;
+    const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : null;
     if (!sessionId) continue;
 
     if (!sessions.has(sessionId)) {
       const seeded = initSession(sessionId, historyPath, false);
-      if (typeof obj.project === 'string') seeded.projectPath = obj.project;
+      if (typeof obj.project === "string") seeded.projectPath = obj.project;
       sessions.set(sessionId, seeded);
     }
 
@@ -293,19 +321,21 @@ async function parseHistoryFile(claudeDir, sessions) {
 
     const ts = parseTimestamp(obj.timestamp);
     if (ts !== null) {
-      session.startedAt = session.startedAt === null ? ts : Math.min(session.startedAt, ts);
-      session.endedAt = session.endedAt === null ? ts : Math.max(session.endedAt, ts);
+      session.startedAt =
+        session.startedAt === null ? ts : Math.min(session.startedAt, ts);
+      session.endedAt =
+        session.endedAt === null ? ts : Math.max(session.endedAt, ts);
     }
 
     session.promptCount += 1;
-    if (session.projectPath === 'unknown' && typeof obj.project === 'string') {
+    if (session.projectPath === "unknown" && typeof obj.project === "string") {
       session.projectPath = obj.project;
     }
   }
 }
 
 async function parseCostBackups(claudeDir) {
-  const backupDir = path.join(claudeDir, 'backups');
+  const backupDir = path.join(claudeDir, "backups");
   const costBySession = new Map();
 
   let files = [];
@@ -315,20 +345,24 @@ async function parseCostBackups(claudeDir) {
     return costBySession;
   }
 
-  const backupFiles = files.filter((f) => path.basename(f).includes('.claude.json.backup.'));
+  const backupFiles = files.filter((f) =>
+    path.basename(f).includes(".claude.json.backup."),
+  );
 
   for (const file of backupFiles) {
     const text = await readTextIfExists(file);
     if (!text) continue;
 
     const parsed = safeJsonParse(text);
-    const projects = parsed && typeof parsed === 'object' ? parsed.projects : null;
-    if (!projects || typeof projects !== 'object') continue;
+    const projects =
+      parsed && typeof parsed === "object" ? parsed.projects : null;
+    if (!projects || typeof projects !== "object") continue;
 
     for (const value of Object.values(projects)) {
-      if (!value || typeof value !== 'object') continue;
-      const sessionId = typeof value.lastSessionId === 'string' ? value.lastSessionId : null;
-      const cost = typeof value.lastCost === 'number' ? value.lastCost : null;
+      if (!value || typeof value !== "object") continue;
+      const sessionId =
+        typeof value.lastSessionId === "string" ? value.lastSessionId : null;
+      const cost = typeof value.lastCost === "number" ? value.lastCost : null;
       if (!sessionId || cost === null || !Number.isFinite(cost)) continue;
 
       const current = costBySession.get(sessionId);
@@ -343,8 +377,8 @@ async function parseCostBackups(claudeDir) {
 
 export async function loadSessionProjectLogDetails(sessionId, projectPath) {
   const base = {
-    sessionId: typeof sessionId === 'string' ? sessionId : '',
-    projectPath: typeof projectPath === 'string' ? projectPath : '',
+    sessionId: typeof sessionId === "string" ? sessionId : "",
+    projectPath: typeof projectPath === "string" ? projectPath : "",
     resolvedProjectPath: null,
     logFilesScanned: 0,
     matchedLogFiles: 0,
@@ -378,16 +412,16 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
   if (!base.sessionId) {
     return {
       ...base,
-      status: 'error',
-      message: 'Session id is required.',
+      status: "error",
+      message: "Session id is required.",
     };
   }
 
-  if (!base.projectPath || base.projectPath === 'unknown') {
+  if (!base.projectPath || base.projectPath === "unknown") {
     return {
       ...base,
-      status: 'no_project_path',
-      message: 'Project path is missing for this session.',
+      status: "no_project_path",
+      message: "Project path is missing for this session.",
     };
   }
 
@@ -397,7 +431,7 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
   } catch {
     return {
       ...base,
-      status: 'project_not_found',
+      status: "project_not_found",
       message: `Project directory not found: ${base.projectPath}`,
     };
   }
@@ -408,7 +442,7 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
   } catch {
     return {
       ...base,
-      status: 'project_not_found',
+      status: "project_not_found",
       message: `Project directory not accessible: ${resolvedProjectPath}`,
     };
   }
@@ -417,12 +451,12 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
     return {
       ...base,
       resolvedProjectPath,
-      status: 'project_not_directory',
+      status: "project_not_directory",
       message: `Project path is not a directory: ${resolvedProjectPath}`,
     };
   }
 
-  const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const claudeProjectsDir = path.join(os.homedir(), ".claude", "projects");
   const candidateDirs = [resolvedProjectPath];
   const candidateKeys = new Set([
     encodeClaudeProjectKey(base.projectPath),
@@ -437,13 +471,14 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
     candidateDirs.push(mappedDir);
   }
 
-  const { files: jsonlFiles, limitHit } = await collectProjectJsonlFiles(candidateDirs);
+  const { files: jsonlFiles, limitHit } =
+    await collectProjectJsonlFiles(candidateDirs);
   if (jsonlFiles.length === 0) {
     return {
       ...base,
       resolvedProjectPath,
       scannedFileLimitHit: limitHit,
-      status: 'no_logs',
+      status: "no_logs",
       message: `No .jsonl Claude logs found under ${resolvedProjectPath} or ~/.claude/projects/<project>.`,
     };
   }
@@ -476,11 +511,11 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
     const text = await readTextIfExists(filePath);
     if (!text) continue;
 
-    for (const rawLine of text.split('\n')) {
+    for (const rawLine of text.split("\n")) {
       const line = rawLine.trim();
       if (!line) continue;
       const parsed = safeJsonParse(line);
-      if (!parsed || typeof parsed !== 'object') continue;
+      if (!parsed || typeof parsed !== "object") continue;
       if (parsed.sessionId !== base.sessionId) continue;
 
       matchedLines += 1;
@@ -488,32 +523,45 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
 
       const ts = parseTimestamp(parsed.timestamp);
       if (ts !== null) {
-        earliestTimestamp = earliestTimestamp === null ? ts : Math.min(earliestTimestamp, ts);
-        latestTimestamp = latestTimestamp === null ? ts : Math.max(latestTimestamp, ts);
+        earliestTimestamp =
+          earliestTimestamp === null ? ts : Math.min(earliestTimestamp, ts);
+        latestTimestamp =
+          latestTimestamp === null ? ts : Math.max(latestTimestamp, ts);
       }
 
-      const recordType = typeof parsed.type === 'string' ? parsed.type : '';
-      const message = parsed.message && typeof parsed.message === 'object' ? parsed.message : null;
+      const recordType = typeof parsed.type === "string" ? parsed.type : "";
+      const message =
+        parsed.message && typeof parsed.message === "object"
+          ? parsed.message
+          : null;
 
-      if (recordType === 'user' && message && message.role === 'user') {
+      if (recordType === "user" && message && message.role === "user") {
         const content = message.content;
         // Count tool_result items (system-generated, not real user prompts)
         if (Array.isArray(content)) {
           for (const item of content) {
-            if (!item || typeof item !== 'object') continue;
-            if (item.type === 'tool_result') {
+            if (!item || typeof item !== "object") continue;
+            if (item.type === "tool_result") {
               toolResultCount += 1;
             }
           }
         }
 
         // Only count real user prompts — exclude tool_result messages, isMeta, and command entries
-        const isToolResultMessage = Array.isArray(content) && content.length > 0
-          && content.every((item) => item && typeof item === 'object' && item.type === 'tool_result');
+        const isToolResultMessage =
+          Array.isArray(content) &&
+          content.length > 0 &&
+          content.every(
+            (item) =>
+              item && typeof item === "object" && item.type === "tool_result",
+          );
         const isMeta = parsed.isMeta === true;
-        const textStr = typeof content === 'string' ? content : '';
-        const isCommandEntry = textStr.includes('<command-name>') || textStr.includes('<local-command')
-          || textStr.includes('/clear') || textStr.includes('/exit');
+        const textStr = typeof content === "string" ? content : "";
+        const isCommandEntry =
+          textStr.includes("<command-name>") ||
+          textStr.includes("<local-command") ||
+          textStr.includes("/clear") ||
+          textStr.includes("/exit");
 
         if (!isToolResultMessage && !isMeta && !isCommandEntry) {
           userPromptCount += 1;
@@ -525,12 +573,12 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
         }
       }
 
-      if (recordType === 'assistant' && message) {
+      if (recordType === "assistant" && message) {
         // Only count completed turns (stop_reason non-null); streaming partials have stop_reason: null
         if (message.stop_reason !== null && message.stop_reason !== undefined) {
           assistantMessageCount += 1;
         }
-        if (typeof message.model === 'string' && message.model) {
+        if (typeof message.model === "string" && message.model) {
           modelSet.add(message.model);
         }
         const assistantPreview = extractTextFromContent(message.content).trim();
@@ -541,24 +589,42 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
 
         if (Array.isArray(message.content)) {
           for (const item of message.content) {
-            if (!item || typeof item !== 'object') continue;
-            if (item.type !== 'tool_use') continue;
-            const toolName = typeof item.name === 'string' ? item.name : 'unknown_tool';
+            if (!item || typeof item !== "object") continue;
+            if (item.type !== "tool_use") continue;
+            const toolName =
+              typeof item.name === "string" ? item.name : "unknown_tool";
             toolCounter.set(toolName, (toolCounter.get(toolName) ?? 0) + 1);
             toolUseCount += 1;
           }
         }
 
-        if (message.usage && typeof message.usage === 'object') {
+        if (message.usage && typeof message.usage === "object") {
           const usage = message.usage;
-          const input = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
-          const output = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-          const cacheRead = typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0;
-          const cacheCreate = typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0;
-          const webSearch = typeof usage.web_search_requests === 'number' ? usage.web_search_requests : 0;
+          const input =
+            typeof usage.input_tokens === "number" ? usage.input_tokens : 0;
+          const output =
+            typeof usage.output_tokens === "number" ? usage.output_tokens : 0;
+          const cacheRead =
+            typeof usage.cache_read_input_tokens === "number"
+              ? usage.cache_read_input_tokens
+              : 0;
+          const cacheCreate =
+            typeof usage.cache_creation_input_tokens === "number"
+              ? usage.cache_creation_input_tokens
+              : 0;
+          const webSearch =
+            typeof usage.web_search_requests === "number"
+              ? usage.web_search_requests
+              : 0;
           const context = input + cacheRead + cacheCreate;
 
-          if (input > 0 || output > 0 || cacheRead > 0 || cacheCreate > 0 || webSearch > 0) {
+          if (
+            input > 0 ||
+            output > 0 ||
+            cacheRead > 0 ||
+            cacheCreate > 0 ||
+            webSearch > 0
+          ) {
             assistantUsageCount += 1;
           }
 
@@ -570,9 +636,10 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
           webSearchRequests += webSearch;
           maxContextTokensInTurn = Math.max(maxContextTokensInTurn, context);
 
-          const modelName = typeof message.model === 'string' && message.model
-            ? message.model
-            : 'unknown';
+          const modelName =
+            typeof message.model === "string" && message.model
+              ? message.model
+              : "unknown";
           if (!modelUsageMap.has(modelName)) {
             modelUsageMap.set(modelName, {
               model: modelName,
@@ -605,7 +672,7 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
       resolvedProjectPath,
       logFilesScanned: jsonlFiles.length,
       scannedFileLimitHit: limitHit,
-      status: 'session_not_found_in_logs',
+      status: "session_not_found_in_logs",
       message: `Found .jsonl logs in project directory, but none include session ${base.sessionId}.`,
     };
   }
@@ -627,9 +694,10 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
     lastPromptPreview,
     firstAssistantPreview,
     lastAssistantPreview,
-    durationMs: earliestTimestamp !== null && latestTimestamp !== null
-      ? Math.max(0, latestTimestamp - earliestTimestamp)
-      : null,
+    durationMs:
+      earliestTimestamp !== null && latestTimestamp !== null
+        ? Math.max(0, latestTimestamp - earliestTimestamp)
+        : null,
     inputTokens,
     outputTokens,
     cacheReadTokens,
@@ -640,15 +708,18 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
     scannedFileLimitHit: limitHit,
     matchedFiles: Array.from(matchedFiles.values()).sort(),
     models: Array.from(modelSet.values()).sort(),
-    modelUsage: Array.from(modelUsageMap.values()).sort((a, b) => b.totalContextTokens - a.totalContextTokens),
+    modelUsage: Array.from(modelUsageMap.values()).sort(
+      (a, b) => b.totalContextTokens - a.totalContextTokens,
+    ),
     toolCounts: toSortedNameCountArray(toolCounter),
-    status: 'ok',
-    message: `Loaded project log details from ${matchedFiles.size} file(s)${limitHit ? ' (scan limited to first 500 .jsonl files).' : '.'}`,
+    status: "ok",
+    message: `Loaded project log details from ${matchedFiles.size} file(s)${limitHit ? " (scan limited to first 500 .jsonl files). Score above may be different from the table list." : "."}`,
   };
 }
 
 export async function loadClaudeMetrics() {
-  const claudeDir = process.env.CLAUDE_DIR || path.join(os.homedir(), '.claude');
+  const claudeDir =
+    process.env.CLAUDE_DIR || path.join(os.homedir(), ".claude");
   const resolvedClaudeDir = await fs.realpath(claudeDir);
   const inventory = await buildInventory(resolvedClaudeDir);
 
@@ -673,7 +744,7 @@ export async function loadClaudeMetrics() {
   const subagentCounter = new Map();
   const skillCounter = new Map();
 
-  const projectsDir = path.join(resolvedClaudeDir, 'projects');
+  const projectsDir = path.join(resolvedClaudeDir, "projects");
   let projectFiles = [];
   try {
     projectFiles = await walkFiles(projectsDir);
@@ -697,14 +768,16 @@ export async function loadClaudeMetrics() {
       },
       allTime,
       inventory,
-      warnings: ['No projects directory found under ~/.claude.'],
+      warnings: ["No projects directory found under ~/.claude."],
     };
   }
 
   inventory.logFiles += projectFiles.filter(looksLikeLogFile).length;
   inventory.trackedFiles += projectFiles.length;
 
-  const jsonlFiles = projectFiles.filter((file) => file.endsWith('.jsonl') && !file.endsWith('.jsonl.wakatime'));
+  const jsonlFiles = projectFiles.filter(
+    (file) => file.endsWith(".jsonl") && !file.endsWith(".jsonl.wakatime"),
+  );
 
   for (const filePath of jsonlFiles) {
     const text = await readTextIfExists(filePath);
@@ -719,14 +792,15 @@ export async function loadClaudeMetrics() {
       if (matched?.[1]) subagentIds.add(matched[1]);
     }
 
-    for (const rawLine of text.split('\n')) {
+    for (const rawLine of text.split("\n")) {
       const line = rawLine.trim();
       if (!line) continue;
 
       const parsed = safeJsonParse(line);
-      if (!parsed || typeof parsed !== 'object') continue;
+      if (!parsed || typeof parsed !== "object") continue;
 
-      const sessionId = typeof parsed.sessionId === 'string' ? parsed.sessionId : null;
+      const sessionId =
+        typeof parsed.sessionId === "string" ? parsed.sessionId : null;
       if (!sessionId) continue;
 
       if (!sessions.has(sessionId)) {
@@ -737,34 +811,55 @@ export async function loadClaudeMetrics() {
       if (!session) continue;
       session.sourceFiles.add(filePath);
 
-      if (typeof parsed.cwd === 'string') session.projectPath = parsed.cwd;
+      if (typeof parsed.cwd === "string") session.projectPath = parsed.cwd;
 
       const ts = parseTimestamp(parsed.timestamp);
       if (ts !== null) {
-        session.startedAt = session.startedAt === null ? ts : Math.min(session.startedAt, ts);
-        session.endedAt = session.endedAt === null ? ts : Math.max(session.endedAt, ts);
+        session.startedAt =
+          session.startedAt === null ? ts : Math.min(session.startedAt, ts);
+        session.endedAt =
+          session.endedAt === null ? ts : Math.max(session.endedAt, ts);
       }
 
-      const recordType = typeof parsed.type === 'string' ? parsed.type : '';
-      const message = parsed.message && typeof parsed.message === 'object' ? parsed.message : null;
+      const recordType = typeof parsed.type === "string" ? parsed.type : "";
+      const message =
+        parsed.message && typeof parsed.message === "object"
+          ? parsed.message
+          : null;
 
-      if (recordType === 'user' && message && message.role === 'user') {
+      if (recordType === "user" && message && message.role === "user") {
         const content = message.content;
         // Only count real user prompts — exclude tool_result messages, isMeta entries, and command strings
-        const isToolResultMessage = Array.isArray(content) && content.length > 0
-          && content.every((item) => item && typeof item === 'object' && item.type === 'tool_result');
+        const isToolResultMessage =
+          Array.isArray(content) &&
+          content.length > 0 &&
+          content.every(
+            (item) =>
+              item && typeof item === "object" && item.type === "tool_result",
+          );
         const isMeta = parsed.isMeta === true;
-        const textStr = typeof content === 'string' ? content : '';
-        const isCommandEntry = textStr.includes('<command-name>') || textStr.includes('<local-command')
-          || textStr.includes('/clear') || textStr.includes('/exit');
+        const textStr = typeof content === "string" ? content : "";
+        const isCommandEntry =
+          textStr.includes("<command-name>") ||
+          textStr.includes("<local-command") ||
+          textStr.includes("/clear") ||
+          textStr.includes("/exit");
 
-        if (!isToolResultMessage && !isMeta && !isCommandEntry
-          && (typeof content === 'string' || Array.isArray(content))) {
+        if (
+          !isToolResultMessage &&
+          !isMeta &&
+          !isCommandEntry &&
+          (typeof content === "string" || Array.isArray(content))
+        ) {
           session.promptCount += 1;
         }
 
         const userText = extractTextFromContent(content).toLowerCase();
-        if (userText.includes('/skill') || userText.includes('skill.md') || userText.includes('/skills/')) {
+        if (
+          userText.includes("/skill") ||
+          userText.includes("skill.md") ||
+          userText.includes("/skills/")
+        ) {
           allTime.skillMentions += 1;
           const names = new Set(extractSkillNames(userText));
           for (const name of names) {
@@ -773,14 +868,25 @@ export async function loadClaudeMetrics() {
         }
       }
 
-      if (recordType === 'assistant' && message && Array.isArray(message.content)) {
+      if (
+        recordType === "assistant" &&
+        message &&
+        Array.isArray(message.content)
+      ) {
         for (const item of message.content) {
-          if (!item || typeof item !== 'object') continue;
-          if (item.type === 'tool_use') {
+          if (!item || typeof item !== "object") continue;
+          if (item.type === "tool_use") {
             allTime.toolInvocations += 1;
-            const toolName = typeof item.name === 'string' ? item.name.toLowerCase() : 'unknown_tool';
+            const toolName =
+              typeof item.name === "string"
+                ? item.name.toLowerCase()
+                : "unknown_tool";
             toolCounter.set(toolName, (toolCounter.get(toolName) ?? 0) + 1);
-            if (toolName.includes('task') || toolName.includes('spawn_agent') || toolName.includes('agent')) {
+            if (
+              toolName.includes("task") ||
+              toolName.includes("spawn_agent") ||
+              toolName.includes("agent")
+            ) {
               allTime.agentInvocations += 1;
               agentCounter.set(toolName, (agentCounter.get(toolName) ?? 0) + 1);
             }
@@ -788,15 +894,32 @@ export async function loadClaudeMetrics() {
         }
       }
 
-      if (recordType === 'assistant' && message && typeof message.usage === 'object' && message.usage) {
+      if (
+        recordType === "assistant" &&
+        message &&
+        typeof message.usage === "object" &&
+        message.usage
+      ) {
         const usage = message.usage;
-        const input = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
-        const output = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
-        const cacheRead = typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0;
-        const cacheCreate = typeof usage.cache_creation_input_tokens === 'number' ? usage.cache_creation_input_tokens : 0;
-        const webSearch = typeof usage.web_search_requests === 'number' ? usage.web_search_requests : 0;
+        const input =
+          typeof usage.input_tokens === "number" ? usage.input_tokens : 0;
+        const output =
+          typeof usage.output_tokens === "number" ? usage.output_tokens : 0;
+        const cacheRead =
+          typeof usage.cache_read_input_tokens === "number"
+            ? usage.cache_read_input_tokens
+            : 0;
+        const cacheCreate =
+          typeof usage.cache_creation_input_tokens === "number"
+            ? usage.cache_creation_input_tokens
+            : 0;
+        const webSearch =
+          typeof usage.web_search_requests === "number"
+            ? usage.web_search_requests
+            : 0;
 
-        const hasUsage = input > 0 || output > 0 || cacheRead > 0 || cacheCreate > 0;
+        const hasUsage =
+          input > 0 || output > 0 || cacheRead > 0 || cacheCreate > 0;
         if (!hasUsage) continue;
 
         const contextTotal = input + cacheRead + cacheCreate;
@@ -814,7 +937,8 @@ export async function loadClaudeMetrics() {
         session.totalContextTokens += contextTotal;
         session.webSearchRequests += webSearch;
 
-        const model = typeof message.model === 'string' ? message.model : 'unknown';
+        const model =
+          typeof message.model === "string" ? message.model : "unknown";
         if (!session.modelMap.has(model)) {
           session.modelMap.set(model, {
             model,
@@ -836,7 +960,10 @@ export async function loadClaudeMetrics() {
         const contextWindow = getContextWindow(model);
         if (contextWindow) {
           const pct = (contextTotal / contextWindow) * 100;
-          session.peakContextPct = session.peakContextPct === null ? pct : Math.max(session.peakContextPct, pct);
+          session.peakContextPct =
+            session.peakContextPct === null
+              ? pct
+              : Math.max(session.peakContextPct, pct);
         }
       }
     }
@@ -851,6 +978,7 @@ export async function loadClaudeMetrics() {
   }
 
   const sessionList = Array.from(sessions.values())
+    .filter((s) => s.assistantTurns > 0 || s.inputTokens > 0)
     .map((s) => ({
       sessionId: s.sessionId,
       projectPath: s.projectPath,
@@ -866,7 +994,9 @@ export async function loadClaudeMetrics() {
       webSearchRequests: s.webSearchRequests,
       knownCostUsd: s.knownCostUsd,
       peakContextPct: s.peakContextPct,
-      modelBreakdown: Array.from(s.modelMap.values()).sort((a, b) => b.totalContextTokens - a.totalContextTokens),
+      modelBreakdown: Array.from(s.modelMap.values()).sort(
+        (a, b) => b.totalContextTokens - a.totalContextTokens,
+      ),
       sourceFiles: s.sourceFiles.size,
       isSubagent: s.isSubagent,
     }))
@@ -878,17 +1008,28 @@ export async function loadClaudeMetrics() {
   for (const session of sessions.values()) {
     if (!session.isSubagent) continue;
     for (const sourceFile of session.sourceFiles) {
-      const matched = sourceFile.match(/subagents[\\/](agent-[^./\\]+)\.jsonl$/);
+      const matched = sourceFile.match(
+        /subagents[\\/](agent-[^./\\]+)\.jsonl$/,
+      );
       if (matched?.[1]) {
-        subagentCounter.set(matched[1], (subagentCounter.get(matched[1]) ?? 0) + 1);
+        subagentCounter.set(
+          matched[1],
+          (subagentCounter.get(matched[1]) ?? 0) + 1,
+        );
         break;
       }
     }
   }
   allTime.toolBreakdown = toBreakdown(toolCounter, allTime.toolInvocations);
   allTime.agentBreakdown = toBreakdown(agentCounter, allTime.agentInvocations);
-  allTime.subagentBreakdown = toBreakdown(subagentCounter, allTime.subagentSessions);
-  const skillDetailTotal = Array.from(skillCounter.values()).reduce((sum, count) => sum + count, 0);
+  allTime.subagentBreakdown = toBreakdown(
+    subagentCounter,
+    allTime.subagentSessions,
+  );
+  const skillDetailTotal = Array.from(skillCounter.values()).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   allTime.skillBreakdown = toBreakdown(skillCounter, skillDetailTotal);
 
   const displaySessions = sessionList.filter((s) => !s.isSubagent);
@@ -904,7 +1045,8 @@ export async function loadClaudeMetrics() {
       acc.cacheReadTokens += session.cacheReadTokens;
       acc.cacheCreationTokens += session.cacheCreationTokens;
       acc.totalContextTokens += session.totalContextTokens;
-      if (session.knownCostUsd !== null) acc.knownCostUsd += session.knownCostUsd;
+      if (session.knownCostUsd !== null)
+        acc.knownCostUsd += session.knownCostUsd;
       return acc;
     },
     {
@@ -922,13 +1064,18 @@ export async function loadClaudeMetrics() {
   );
 
   if (target.length > 0) {
-    const covered = target.filter((session) => session.knownCostUsd !== null).length;
+    const covered = target.filter(
+      (session) => session.knownCostUsd !== null,
+    ).length;
     cumulative.knownCostCoveragePct = (covered / target.length) * 100;
   }
 
-  if (sessionList.length === 0) warnings.push('No parseable session logs found in .claude/projects.');
+  if (sessionList.length === 0)
+    warnings.push("No parseable session logs found in .claude/projects.");
   if (cumulative.knownCostCoveragePct < 100) {
-    warnings.push('Cost is partially known and sourced from .claude/backups/.claude.json.backup.* when available.');
+    warnings.push(
+      "Cost is partially known and sourced from .claude/backups/.claude.json.backup.* when available.",
+    );
   }
 
   return {

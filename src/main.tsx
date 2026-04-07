@@ -9,8 +9,17 @@ const tw = install({
 });
 observe(tw, document.documentElement);
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!;
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,
 );
+
+// Fade out the pre-render loader once React has painted
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    const loader = document.getElementById('pre-loader');
+    if (loader) loader.classList.add('hidden');
+  });
+});

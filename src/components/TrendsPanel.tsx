@@ -1,5 +1,19 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { CartesianGrid, Line, LineChart, XAxis, YAxis, Bar, BarChart } from 'recharts';
 import type { SessionMetrics } from '../types';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 
 export interface TrendsPanelProps {
   sessions: SessionMetrics[];
@@ -8,13 +22,6 @@ export interface TrendsPanelProps {
 }
 
 type TrendMode = 'sessions_24' | 'hours_24' | 'days_7';
-type TrendPoint = {
-  key: string;
-  value: number;
-  label: string;
-  tooltipTitle: string;
-  tooltipMeta: string;
-};
 
 function formatTime24(value: number): string {
   return new Date(value).toLocaleTimeString([], {
@@ -24,140 +31,104 @@ function formatTime24(value: number): string {
   });
 }
 
+const lineChartConfig = {
+  context: {
+    label: 'Context Tokens',
+    color: '#34d399',
+  },
+} satisfies ChartConfig;
+
+const barChartConfig = {
+  total: {
+    label: 'Context Tokens',
+    color: '#34d399',
+  },
+} satisfies ChartConfig;
+
 export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: TrendsPanelProps) {
   const [mode, setMode] = useState<TrendMode>('sessions_24');
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const chartRef = useRef<HTMLDivElement | null>(null);
-  const plotWidth = 480;
-  const plotHeight = 120;
 
-  function updateHoverIndex(clientX: number) {
-    if (!chartRef.current || points.length < 2) return;
-    const rect = chartRef.current.getBoundingClientRect();
-    if (rect.width <= 0) return;
-
-    const ratio = (clientX - rect.left) / rect.width;
-    const clamped = Math.max(0, Math.min(1, ratio));
-    const index = Math.round(clamped * (points.length - 1));
-    setHoverIndex(index);
-  }
-
-  const points = useMemo<TrendPoint[]>(() => {
+  const points = useMemo(() => {
     if (mode === 'sessions_24') {
-      const sliced = sessions.slice(0, 24).reverse();
-      return sliced.map((s, idx) => ({
+      return sessions.slice(0, 24).reverse().map((s, idx) => ({
         key: `session-${s.sessionId}-${idx}`,
-        value: s.totalContextTokens,
-        label: s.endedAt === null ? `S${idx + 1}` : formatTime24(s.endedAt),
-        tooltipTitle: `Session #${idx + 1}`,
-        tooltipMeta: s.endedAt === null
-          ? 'Unknown time'
-          : new Date(s.endedAt).toLocaleString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            day: '2-digit',
-            month: 'short',
-          }),
+        date: s.endedAt === null ? `S${idx + 1}` : s.endedAt.toString(),
+        label: s.sessionId.slice(0, 7),
+        context: s.totalContextTokens,
+        tooltipDate: s.endedAt === null
+          ? `Session ${idx + 1}`
+          : new Date(s.endedAt).toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+            }),
       }));
     }
 
     if (mode === 'hours_24') {
       const now = new Date();
       now.setMinutes(0, 0, 0);
-      const start = now.getTime() - (23 * 60 * 60 * 1000);
+      const start = now.getTime() - 23 * 60 * 60 * 1000;
       const buckets = Array.from({ length: 24 }, (_, i) => {
-        const ts = start + (i * 60 * 60 * 1000);
+        const ts = start + i * 60 * 60 * 1000;
         return {
           key: `h-${ts}`,
-          value: 0,
+          date: ts.toString(),
           label: formatTime24(ts),
-          tooltipTitle: `Hour ${formatTime24(ts)}`,
-          tooltipMeta: new Date(ts).toLocaleDateString([], {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
+          context: 0,
+          tooltipDate: new Date(ts).toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
           }),
         };
       });
-
       for (const s of sessions) {
         if (s.endedAt === null) continue;
-        if (s.endedAt < start || s.endedAt > now.getTime() + (60 * 60 * 1000)) continue;
+        if (s.endedAt < start || s.endedAt > now.getTime() + 60 * 60 * 1000) continue;
         const hourStart = new Date(s.endedAt);
         hourStart.setMinutes(0, 0, 0);
         const index = Math.floor((hourStart.getTime() - start) / (60 * 60 * 1000));
-        if (index >= 0 && index < buckets.length) buckets[index].value += s.totalContextTokens;
+        if (index >= 0 && index < buckets.length) buckets[index].context += s.totalContextTokens;
       }
-
       return buckets;
     }
 
-    const buckets: TrendPoint[] = [];
+    // days_7
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    for (let i = 6; i >= 0; i -= 1) {
+    const buckets = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      buckets.push({
+      d.setDate(today.getDate() - (6 - i));
+      return {
         key: d.toISOString().slice(0, 10),
+        date: d.toISOString().slice(0, 10),
         label: d.toLocaleDateString(undefined, { weekday: 'short' }),
-        value: 0,
-        tooltipTitle: d.toLocaleDateString(undefined, { weekday: 'long' }),
-        tooltipMeta: d.toLocaleDateString(undefined, {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
+        context: 0,
+        tooltipDate: d.toLocaleDateString('en-US', {
+          weekday: 'long', month: 'short', day: 'numeric',
         }),
-      });
-    }
-
+      };
+    });
     for (const s of sessions) {
       if (s.endedAt === null) continue;
       const d = new Date(s.endedAt);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString().slice(0, 10);
       const bucket = buckets.find((b) => b.key === key);
-      if (bucket) bucket.value += s.totalContextTokens;
+      if (bucket) bucket.context += s.totalContextTokens;
     }
-
     return buckets;
   }, [mode, sessions]);
 
-  const xAxisTicks = useMemo(() => {
-    if (points.length === 0) return [];
-    const targetTickCount = Math.min(6, points.length);
-    const lastIndex = points.length - 1;
-    const used = new Set<number>();
-    const ticks: Array<{ index: number; label: string }> = [];
-
-    for (let i = 0; i < targetTickCount; i += 1) {
-      const index = Math.round((i / Math.max(targetTickCount - 1, 1)) * lastIndex);
-      if (used.has(index)) continue;
-      used.add(index);
-      ticks.push({ index, label: points[index]?.label ?? '' });
-    }
-
-    return ticks;
-  }, [points]);
-
   const days = useMemo(() => {
-    const buckets: Array<{ label: string; key: string; total: number }> = [];
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-
-    for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      buckets.push({
-        key,
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const buckets = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - (6 - i));
+      return {
+        key: d.toISOString().slice(0, 10),
         label: d.toLocaleDateString(undefined, { weekday: 'short' }),
         total: 0,
-      });
-    }
-
+      };
+    });
     const map = new Map(buckets.map((b) => [b.key, b]));
     for (const s of sessions) {
       if (s.endedAt === null) continue;
@@ -165,191 +136,164 @@ export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: TrendsP
       const bucket = map.get(key);
       if (bucket) bucket.total += s.totalContextTokens;
     }
-
     return buckets;
   }, [sessions]);
 
-  const values = points.map((p) => p.value);
-  const max = Math.max(...values, 1);
-  const normalizer = useMemo(() => {
-    const nonZero = values.filter((v) => v > 0);
-    const minNonZero = nonZero.length > 0 ? Math.min(...nonZero) : 0;
-    const skewRatio = minNonZero > 0 ? max / minNonZero : max;
-    const usePowerScale = skewRatio >= 30 && max >= 1_000;
-    const exponent = usePowerScale ? 0.68 : 1;
+  const totalContext = useMemo(
+    () => points.reduce((acc, p) => acc + p.context, 0),
+    [points],
+  );
 
-    const toScale = (value: number) => (value <= 0 ? 0 : value ** exponent);
-    const fromScale = (value: number) => (
-      exponent === 1
-        ? Math.max(0, Math.round(value))
-        : Math.max(0, Math.round(value ** (1 / exponent)))
-    );
-    const transformedMax = Math.max(...values.map((v) => toScale(v)), 1);
-    const yTicks = Array.from({ length: 5 }, (_, idx) => {
-      const fraction = idx / 4;
-      const scaled = fraction * transformedMax;
-      const raw = fromScale(scaled);
-      const y = plotHeight - fraction * plotHeight;
-      return {
-        raw,
-        label: formatCompactKM(raw),
-        y,
-      };
-    });
+  const modeLabels: Record<TrendMode, { title: string; description: string }> = {
+    sessions_24: {
+      title: 'Last 24 Sessions',
+      description: 'Context tokens per session',
+    },
+    hours_24: {
+      title: 'Last 24 Hours',
+      description: 'Context tokens by hour',
+    },
+    days_7: {
+      title: 'Last 7 Days',
+      description: 'Context tokens by day',
+    },
+  };
 
-    return {
-      usePowerScale,
-      transformedMax,
-      toScale,
-      yTicks,
-    };
-  }, [formatCompactKM, max, plotHeight, values]);
-  const dailyMax = Math.max(...days.map((d) => d.total), 1);
-
-  const polyline = points.length > 1
-    ? points
-      .map((s, idx) => {
-        const x = (idx / (points.length - 1)) * plotWidth;
-        const y = plotHeight - ((normalizer.toScale(s.value) / normalizer.transformedMax) * plotHeight);
-        return `${x},${y}`;
-      })
-      .join(' ')
-    : '';
-  const safeHoverIndex = hoverIndex !== null ? Math.max(0, Math.min(points.length - 1, hoverIndex)) : null;
-  const hoveredPoint = safeHoverIndex !== null ? points[safeHoverIndex] : null;
-  const hoverX = safeHoverIndex !== null && points.length > 1
-    ? (safeHoverIndex / (points.length - 1)) * plotWidth
-    : null;
-  const hoverY = safeHoverIndex !== null
-    ? plotHeight - ((normalizer.toScale(points[safeHoverIndex]?.value ?? 0) / normalizer.transformedMax) * plotHeight)
-    : null;
-
-  const modeTitle = mode === 'sessions_24'
-    ? `Context tokens trend (last ${points.length} sessions)`
-    : mode === 'hours_24'
-      ? 'Context tokens trend (last 24 hours)'
-      : 'Context tokens trend (last 7 days)';
-  const xAxisLabel = mode === 'sessions_24'
-    ? 'X-axis: session end time (24h)'
-    : mode === 'hours_24'
-      ? 'X-axis: hour of day (24h)'
-      : 'X-axis: day of week';
   return (
-    <section className="mt-4 rounded-xl border border-gray-700 bg-gray-800 p-4">
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs uppercase tracking-wide text-gray-300">{modeTitle}</div>
-          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-900 p-1">
-            <button
-              type="button"
-              onClick={() => setMode('sessions_24')}
-              className={`rounded px-2 py-1 text-xs ${mode === 'sessions_24' ? 'bg-green-500/20 text-green-200' : 'text-gray-300'}`}
-            >
-              24 sessions
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('hours_24')}
-              className={`rounded px-2 py-1 text-xs ${mode === 'hours_24' ? 'bg-green-500/20 text-green-200' : 'text-gray-300'}`}
-            >
-              24 hr
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('days_7')}
-              className={`rounded px-2 py-1 text-xs ${mode === 'days_7' ? 'bg-green-500/20 text-green-200' : 'text-gray-300'}`}
-            >
-              7 days
-            </button>
+    <section className="mt-4 space-y-4">
+      {/* ── Interactive line chart ─────────────────────────────────────────── */}
+      <Card className="py-4 sm:py-0">
+        <CardHeader className="flex flex-col items-stretch border-b border-gray-700 p-0! sm:flex-row">
+          <div className="flex flex-1 flex-col justify-center gap-1 px-6 pb-3 pt-4 sm:pb-4">
+            <CardTitle className="text-base text-gray-100">Context Token Trend</CardTitle>
+            <CardDescription>{modeLabels[mode].description}</CardDescription>
           </div>
-        </div>
-        {points.length < 2 ? (
-          <div className="text-sm text-gray-400">Not enough sessions yet</div>
-        ) : (
-          <>
-            <div
-              ref={chartRef}
-              className="flex items-stretch gap-3 py-1"
-              onMouseMove={(event) => updateHoverIndex(event.clientX)}
-              onMouseLeave={() => setHoverIndex(null)}
-            >
-              <div className="relative h-32 w-16 shrink-0">
-                {normalizer.yTicks.map((tick) => (
-                  <div
-                    key={`ytick-${tick.y}-${tick.raw}`}
-                    className="absolute right-1 -translate-y-1/2 text-[10px] text-gray-300"
-                    style={{ top: `${(tick.y / plotHeight) * 100}%` }}
-                  >
-                    {tick.label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="relative min-w-0 flex-1">
-                <svg viewBox={`0 0 ${plotWidth} ${plotHeight}`} className="h-32 w-full rounded-lg border border-gray-700 bg-gray-700" preserveAspectRatio="none" role="img" aria-label="Context tokens trend">
-                  {normalizer.yTicks.map((tick) => (
-                    <line
-                      key={`grid-${tick.y}-${tick.raw}`}
-                      x1={0}
-                      y1={tick.y}
-                      x2={plotWidth}
-                      y2={tick.y}
-                      stroke="#4b5563"
-                      strokeWidth="1"
-                      strokeDasharray="2 2"
-                    />
-                  ))}
-                  <polyline points={polyline} fill="none" stroke="#b9ca3f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  {hoveredPoint !== null && hoverX !== null && hoverY !== null ? (
-                    <>
-                      <line x1={hoverX} y1={0} x2={hoverX} y2={plotHeight} stroke="#9ca3af" strokeDasharray="4 4" strokeWidth="1" />
-                      <circle cx={hoverX} cy={hoverY} r="4" fill="#b9ca3f" stroke="#111827" strokeWidth="1.5" />
-                    </>
-                  ) : null}
-                </svg>
-                {hoveredPoint !== null && hoverX !== null ? (
-                  <div
-                    className="pointer-events-none absolute top-2 z-20 max-w-[220px] -translate-x-1/2 rounded-md border border-gray-600 bg-gray-900/95 px-2 py-1.5 text-xs shadow-lg"
-                    style={{
-                      left: `${(hoverX / plotWidth) * 100}%`,
-                    }}
-                  >
-                    <div className="font-semibold text-gray-100">{hoveredPoint.tooltipTitle}</div>
-                    <div className="text-gray-300">{hoveredPoint.tooltipMeta}</div>
-                    <div className="mt-1 text-green-300">{formatNumber(hoveredPoint.value)} tokens</div>
-                  </div>
-                ) : null}
-              </div>
+          <div className="flex">
+            {(['sessions_24', 'hours_24', 'days_7'] as TrendMode[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                data-active={mode === key}
+                className="flex flex-1 flex-col justify-center gap-1 border-t border-gray-700 px-5 py-3 text-left even:border-l even:border-gray-700 data-[active=true]:bg-gray-700/50 sm:border-t-0 sm:border-l sm:px-6 sm:py-4"
+                onClick={() => setMode(key)}
+              >
+                <span className="text-xs text-gray-400 whitespace-nowrap">
+                  {modeLabels[key].title}
+                </span>
+                <span className="text-sm font-bold text-gray-100 sm:text-lg leading-none">
+                  {mode === key ? formatCompactKM(totalContext) : '—'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="px-2 pt-4 sm:p-6">
+          {points.length < 2 ? (
+            <div className="flex h-[200px] items-center justify-center text-sm text-gray-500">
+              Not enough data for this view
             </div>
-            <div className="flex items-center justify-between gap-2 text-xs text-gray-400">
-              {xAxisTicks.map((tick) => (
-                <div key={`${tick.index}-${tick.label}`} className="truncate text-center" title={`Session ${tick.index + 1}`}>
-                  {tick.label}
-                </div>
-              ))}
-            </div>
-            <div className="text-xs text-gray-400">{xAxisLabel}</div>
-          </>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <div className="text-xs uppercase tracking-wide text-gray-300">Usage per day (last 7 days)</div>
-        <div className="mt-2 grid grid-cols-7 gap-2">
-          {days.map((d) => (
-            <div key={d.key} className="text-center" title={`${d.label}: ${formatNumber(d.total)} tokens`}>
-              <div className="flex h-24 items-end justify-center rounded-lg border border-gray-700 bg-gray-700 p-1">
-                <div
-                  className="min-h-px w-full rounded-md bg-gradient-to-b from-green-400 to-green-500"
-                  style={{ height: `${(d.total / dailyMax) * 100}%` }}
+          ) : (
+            <ChartContainer config={lineChartConfig} className="aspect-auto h-[220px] w-full">
+              <LineChart data={points} margin={{ left: 8, right: 8 }}>
+                <CartesianGrid vertical={false} stroke="#374151" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={32}
+                  tick={{ fill: '#9ca3af', fontSize: 11 }}
                 />
-              </div>
-              <div className="mt-1.5 text-xs text-gray-200">{d.label}</div>
-              <div className="text-xs text-gray-400">{formatCompactKM(d.total)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={4}
+                  width={52}
+                  tick={{ fill: '#9ca3af', fontSize: 11 }}
+                  tickFormatter={formatCompactKM}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      className="w-[170px]"
+                      nameKey="context"
+                      labelFormatter={(_value, payload) => {
+                        const item = payload?.[0]?.payload as Record<string, unknown> | undefined;
+                        return (item?.tooltipDate as string | undefined) ?? '';
+                      }}
+                      formatter={(value) => (
+                        <span className="font-mono text-green-300">
+                          {formatNumber(value as number)} tokens
+                        </span>
+                      )}
+                    />
+                  }
+                />
+                <Line
+                  dataKey="context"
+                  type="monotone"
+                  stroke="var(--color-context)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#34d399', stroke: '#111827', strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Daily bar chart ────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base text-gray-100">Daily Usage</CardTitle>
+          <CardDescription>Context tokens over the last 7 days</CardDescription>
+        </CardHeader>
+        <CardContent className="px-2 pb-4 sm:px-6">
+          <ChartContainer config={barChartConfig} className="aspect-auto h-[160px] w-full">
+            <BarChart data={days} margin={{ left: 8, right: 8 }}>
+              <CartesianGrid vertical={false} stroke="#374151" strokeDasharray="3 3" />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tick={{ fill: '#9ca3af', fontSize: 11 }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tickMargin={4}
+                width={52}
+                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tickFormatter={formatCompactKM}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    className="w-[160px]"
+                    nameKey="total"
+                    labelFormatter={(_value, payload) => {
+                      const item = payload?.[0]?.payload as Record<string, unknown> | undefined;
+                      return (item?.label as string | undefined) ?? '';
+                    }}
+                    formatter={(value) => (
+                      <span className="font-mono text-green-300">
+                        {formatNumber(value as number)} tokens
+                      </span>
+                    )}
+                  />
+                }
+              />
+              <Bar
+                dataKey="total"
+                fill="var(--color-total)"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
     </section>
   );
 }

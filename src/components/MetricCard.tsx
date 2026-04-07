@@ -1,6 +1,14 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { GlowCard } from '@/components/ui/spotlight-card';
 
+function valueTextSize(value: string): string {
+  const len = value.length;
+  if (len <= 6)  return 'text-xl md:text-2xl';
+  if (len <= 10) return 'text-lg md:text-xl';
+  if (len <= 14) return 'text-base md:text-lg';
+  return 'text-sm md:text-base';
+}
+
 export interface MetricCardProps {
   label: string;
   value: string;
@@ -13,7 +21,7 @@ export function MetricCard({ label, value, hint, onClick, right }: MetricCardPro
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-xl md:text-2xl font-extrabold leading-tight  text-gray-100 break-words">
+        <div className={`min-w-0 ${valueTextSize(value === 'N/A' ? '-' : value)} font-extrabold leading-tight text-gray-100 whitespace-nowrap overflow-hidden`}>
           {value === 'N/A' ? '-' : value}
         </div>
         {right}
