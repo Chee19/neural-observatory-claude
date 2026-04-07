@@ -496,25 +496,40 @@ export async function loadSessionProjectLogDetails(sessionId, projectPath) {
       const message = parsed.message && typeof parsed.message === 'object' ? parsed.message : null;
 
       if (recordType === 'user' && message && message.role === 'user') {
-        userPromptCount += 1;
-        const textPreview = extractTextFromContent(message.content).trim();
-        if (textPreview) {
-          if (!firstPromptPreview) firstPromptPreview = textPreview;
-          lastPromptPreview = textPreview;
-        }
-
-        if (Array.isArray(message.content)) {
-          for (const item of message.content) {
+        const content = message.content;
+        // Count tool_result items (system-generated, not real user prompts)
+        if (Array.isArray(content)) {
+          for (const item of content) {
             if (!item || typeof item !== 'object') continue;
             if (item.type === 'tool_result') {
               toolResultCount += 1;
             }
           }
         }
+
+        // Only count real user prompts — exclude tool_result messages, isMeta, and command entries
+        const isToolResultMessage = Array.isArray(content) && content.length > 0
+          && content.every((item) => item && typeof item === 'object' && item.type === 'tool_result');
+        const isMeta = parsed.isMeta === true;
+        const textStr = typeof content === 'string' ? content : '';
+        const isCommandEntry = textStr.includes('<command-name>') || textStr.includes('<local-command')
+          || textStr.includes('/clear') || textStr.includes('/exit');
+
+        if (!isToolResultMessage && !isMeta && !isCommandEntry) {
+          userPromptCount += 1;
+          const textPreview = extractTextFromContent(content).trim();
+          if (textPreview) {
+            if (!firstPromptPreview) firstPromptPreview = textPreview;
+            lastPromptPreview = textPreview;
+          }
+        }
       }
 
       if (recordType === 'assistant' && message) {
-        assistantMessageCount += 1;
+        // Only count completed turns (stop_reason non-null); streaming partials have stop_reason: null
+        if (message.stop_reason !== null && message.stop_reason !== undefined) {
+          assistantMessageCount += 1;
+        }
         if (typeof message.model === 'string' && message.model) {
           modelSet.add(message.model);
         }
@@ -735,7 +750,16 @@ export async function loadClaudeMetrics() {
 
       if (recordType === 'user' && message && message.role === 'user') {
         const content = message.content;
-        if (typeof content === 'string' || Array.isArray(content)) {
+        // Only count real user prompts — exclude tool_result messages, isMeta entries, and command strings
+        const isToolResultMessage = Array.isArray(content) && content.length > 0
+          && content.every((item) => item && typeof item === 'object' && item.type === 'tool_result');
+        const isMeta = parsed.isMeta === true;
+        const textStr = typeof content === 'string' ? content : '';
+        const isCommandEntry = textStr.includes('<command-name>') || textStr.includes('<local-command')
+          || textStr.includes('/clear') || textStr.includes('/exit');
+
+        if (!isToolResultMessage && !isMeta && !isCommandEntry
+          && (typeof content === 'string' || Array.isArray(content))) {
           session.promptCount += 1;
         }
 
@@ -777,8 +801,12 @@ export async function loadClaudeMetrics() {
 
         const contextTotal = input + cacheRead + cacheCreate;
 
-        session.assistantTurns += 1;
-        allTime.assistantTurns += 1;
+        // Only count completed turns — streaming partial entries have stop_reason: null
+        const stopReason = message.stop_reason;
+        if (stopReason !== null && stopReason !== undefined) {
+          session.assistantTurns += 1;
+          allTime.assistantTurns += 1;
+        }
         session.inputTokens += input;
         session.outputTokens += output;
         session.cacheReadTokens += cacheRead;

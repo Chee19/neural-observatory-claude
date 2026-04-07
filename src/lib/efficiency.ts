@@ -66,23 +66,25 @@ function toGrade(total: number): { grade: string; label: string } {
 // ─── Core metrics (always available from SessionMetrics) ─────────────────────
 
 function scoreCacheHit(s: SessionMetrics): MetricScore {
-  const avail = s.totalContextTokens > 0;
-  const raw = avail ? (s.cacheReadTokens / s.totalContextTokens) * 100 : null;
+  // Denominator is only (directInput + cacheRead) — cacheWrite is excluded per algorithm
+  const denom = s.inputTokens + s.cacheReadTokens;
+  const avail = denom > 0;
+  const raw = avail ? (s.cacheReadTokens / denom) * 100 : null;
   const score = avail
     ? piecewise(raw!, [
-        [0, 5],
-        [30, 25],
-        [50, 50],
-        [70, 75],
-        [80, 90],
-        [85, 100],
+        [0, 10],
+        [30, 10],
+        [50, 35],
+        [70, 65],
+        [85, 88],
+        [100, 100],
       ])
     : 0;
   return {
     key: "cacheHit",
-    label: "Cache Hit",
+    label: "Cache Utilisation",
     description:
-      "cacheReadTokens / totalContextTokens — context reuse efficiency",
+      "cacheReadTokens / (inputTokens + cacheReadTokens) — context reuse efficiency",
     rawValue: raw,
     rawDisplay: raw !== null ? `${raw.toFixed(1)}%` : "N/A",
     score,
@@ -94,30 +96,28 @@ function scoreCacheHit(s: SessionMetrics): MetricScore {
 }
 
 function scoreOutputLeverage(s: SessionMetrics): MetricScore {
-  const avail = s.inputTokens > 0;
-  const raw = avail ? s.outputTokens / s.inputTokens : null;
+  // Denominator is totalNewContext = directInput + cacheWrite (not directInput alone)
+  const newContext = s.inputTokens + s.cacheCreationTokens;
+  const avail = newContext > 0;
+  const raw = avail ? (s.outputTokens / newContext) * 100 : null;
   const score = avail
     ? piecewise(raw!, [
-        [0, 5],
-        [2, 10],
-        [5, 25],
-        [10, 50],
-        [20, 75],
-        [30, 90],
-        [40, 100],
-        [50, 97],
-        [75, 80],
-        [100, 60],
-        [150, 35],
+        [0, 15],
+        [5, 40],
+        [15, 80],
+        [40, 80],
+        [70, 100],
+        [100, 80],
+        [150, 45],
       ])
     : 0;
   return {
     key: "outputLeverage",
-    label: "Output Leverage",
+    label: "Output Density",
     description:
-      "outputTokens / inputTokens — value amplification per prompt token",
+      "outputTokens / (inputTokens + cacheCreationTokens) × 100 — value generated per new context token",
     rawValue: raw,
-    rawDisplay: raw !== null ? `${raw.toFixed(1)}×` : "N/A",
+    rawDisplay: raw !== null ? `${raw.toFixed(1)}%` : "N/A",
     score,
     weight: 0.18,
     band: toBand(score),
@@ -131,15 +131,15 @@ function scoreContextEfficiency(s: SessionMetrics): MetricScore {
   const raw = s.peakContextPct;
   const score = avail
     ? piecewise(raw!, [
-        [0, 30],
-        [5, 65],
-        [10, 100],
-        [30, 100],
-        [40, 75],
-        [50, 50],
-        [60, 30],
-        [70, 15],
-        [100, 5],
+        [0, 35],
+        [5, 35],
+        [10, 65],
+        [35, 100],
+        [37, 70],
+        [55, 70],
+        [57, 35],
+        [75, 35],
+        [100, 10],
       ])
     : 0;
   return {
@@ -163,20 +163,18 @@ function scoreTurnsRatio(s: SessionMetrics): MetricScore {
   const score = avail
     ? piecewise(raw!, [
         [0, 10],
-        [0.5, 20],
-        [1.0, 55],
-        [1.5, 85],
-        [2.0, 100],
-        [3.0, 100],
-        [4.0, 70],
-        [5.0, 40],
-        [8.0, 15],
+        [1.5, 30],
+        [2.0, 70],
+        [2.5, 100],
+        [4.0, 100],
+        [6.0, 70],
+        [7.0, 20],
       ])
     : 0;
   return {
     key: "turnsRatio",
     label: "Turns Ratio",
-    description: "assistantTurns / promptCount — healthy iteration is 1.5–3×",
+    description: "completedAssistantTurns / realUserPrompts — optimal range is 2.5–4× (tool-use cycles per prompt)",
     rawValue: raw,
     rawDisplay: raw !== null ? `${raw.toFixed(2)}×` : "N/A",
     score,
@@ -188,30 +186,29 @@ function scoreTurnsRatio(s: SessionMetrics): MetricScore {
 }
 
 function scorePromptDepth(s: SessionMetrics): MetricScore {
+  // Use totalNewContext per prompt (directInput + cacheWrite), not directInput alone
   const avail = s.promptCount > 0;
-  const raw = avail ? s.inputTokens / s.promptCount : null;
+  const raw = avail ? (s.inputTokens + s.cacheCreationTokens) / s.promptCount : null;
   const score = avail
     ? piecewise(raw!, [
-        [0, 10],
-        [5, 30],
-        [10, 55],
-        [20, 80],
-        [50, 100],
-        [150, 100],
-        [200, 80],
-        [300, 60],
-        [500, 35],
+        [0, 15],
+        [50, 15],
+        [200, 50],
+        [800, 85],
+        [2500, 100],
+        [5000, 70],
+        [8000, 40],
       ])
     : 0;
   return {
     key: "promptDepth",
     label: "Prompt Depth",
     description:
-      "inputTokens / promptCount — avg token density per user prompt",
+      "(inputTokens + cacheCreationTokens) / promptCount — avg new context per user prompt",
     rawValue: raw,
-    rawDisplay: raw !== null ? `${raw.toFixed(1)} tok/msg` : "N/A",
+    rawDisplay: raw !== null ? `${raw.toFixed(0)} tok/msg` : "N/A",
     score,
-    weight: 0.12,
+    weight: 0.10,
     band: toBand(score),
     available: avail,
     requiresLogData: false,
@@ -228,25 +225,24 @@ function scoreToolDensity(
   const raw = avail ? log!.toolUseCount / log!.assistantMessageCount : null;
   const score = avail
     ? piecewise(raw!, [
-        [0, 20],
-        [0.3, 45],
-        [0.7, 80],
-        [1.0, 100],
+        [0, 25],
+        [0.3, 25],
+        [0.5, 55],
+        [0.7, 100],
         [2.0, 100],
-        [3.0, 80],
-        [4.0, 55],
-        [6.0, 30],
+        [4.0, 75],
+        [5.0, 40],
       ])
     : 0;
   return {
     key: "toolDensity",
     label: "Tool Density",
     description:
-      "toolUseCount / assistantMessageCount — action-orientation per turn",
+      "toolUseCount / completedAssistantTurns — action-orientation per turn",
     rawValue: raw,
     rawDisplay: raw !== null ? `${raw.toFixed(2)}/turn` : "N/A",
     score,
-    weight: 0.08,
+    weight: 0.10,
     band: toBand(score),
     available: avail,
     requiresLogData: true,
@@ -290,13 +286,11 @@ function scoreActionRatio(
 
   const raw = (writeCount / totalTools) * 100;
   const score = piecewise(raw, [
-    [0, 0],
-    [1, 25],
-    [10, 55],
-    [25, 90],
-    [40, 100],
-    [55, 90],
-    [70, 75],
+    [0, 5],
+    [10, 35],
+    [25, 100],
+    [50, 100],
+    [70, 85],
     [100, 55],
   ]);
   return stub(raw, `${raw.toFixed(1)}%`, score, true);
