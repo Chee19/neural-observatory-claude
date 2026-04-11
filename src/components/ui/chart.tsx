@@ -2,10 +2,10 @@ import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 import { cn } from "@/lib/utils"
 
-export type ChartConfig = Record<string, { label?: React.ReactNode; color?: string; icon?: React.ComponentType }>
+export type TChartConfig = Record<string, { label?: React.ReactNode; color?: string; icon?: React.ComponentType }>
 
-type ChartContextProps = { config: ChartConfig }
-const ChartContext = React.createContext<ChartContextProps | null>(null)
+type TChartContextProps = { config: TChartConfig }
+const ChartContext = React.createContext<TChartContextProps | null>(null)
 
 function useChart() {
   const context = React.useContext(ChartContext)
@@ -15,7 +15,7 @@ function useChart() {
 
 const ChartContainer = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & { config: ChartConfig; children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"] }
+  React.ComponentProps<"div"> & { config: TChartConfig; children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"] }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
@@ -37,7 +37,7 @@ const ChartContainer = React.forwardRef<
 })
 ChartContainer.displayName = "ChartContainer"
 
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+const ChartStyle = ({ id, config }: { id: string; config: TChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([, cfg]) => cfg.color)
   if (!colorConfig.length) return null
   return (
@@ -47,7 +47,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-type TooltipContentProps = React.ComponentProps<"div"> & {
+type TTooltipContentProps = React.ComponentProps<"div"> & {
   active?: boolean
   payload?: Record<string, unknown>[]
   label?: unknown
@@ -61,7 +61,7 @@ type TooltipContentProps = React.ComponentProps<"div"> & {
   color?: string
 }
 
-const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
+const ChartTooltipContent = React.forwardRef<HTMLDivElement, TTooltipContentProps>(
   (
     {
       active,
@@ -152,7 +152,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps
 )
 ChartTooltipContent.displayName = "ChartTooltipContent"
 
-function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key: string) {
+function getPayloadConfigFromPayload(config: TChartConfig, payload: unknown, key: string) {
   if (typeof payload !== "object" || payload === null) return undefined
   const payloadPayload = "payload" in payload && typeof (payload as Record<string, unknown>).payload === "object" ? (payload as Record<string, unknown>).payload as Record<string, unknown> : undefined
   let configLabelKey: string = key

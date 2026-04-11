@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
+import dayjs from "dayjs";
+import duration from "dayjs/plugin/duration";
 import { SessionDetailsModal } from "./SessionDetailsModal";
-import type { SessionMetrics, SessionProjectLogDetails } from "../types";
+import type { ISessionMetrics, ISessionProjectLogDetails } from "../types";
 import { computeEfficiencyScore, gradeToDeltaType } from "../lib/efficiency";
 import { BadgeDelta } from "./ui/badge-delta";
 import {
@@ -11,9 +13,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+dayjs.extend(duration);
+
+function formatSessionDuration(
+  startedAt: number | null,
+  endedAt: number | null,
+): string {
+  if (startedAt === null || endedAt === null) return "—";
+  const ms = endedAt - startedAt;
+  if (ms < 0) return "—";
+  const d = dayjs.duration(ms);
+  const h = Math.floor(d.asHours());
+  const m = d.minutes();
+  const s = d.seconds();
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 // ─── Filter range definitions ──────────────────────────────────────────────────
 
-interface RangeOption {
+interface IRangeOption {
   label: string;
   min?: number;
   max?: number;
@@ -21,7 +41,7 @@ interface RangeOption {
   includeNull?: boolean; // "Any" — pass through regardless
 }
 
-const PROMPT_RANGES: RangeOption[] = [
+const PROMPT_RANGES: IRangeOption[] = [
   { label: "Any", includeNull: true },
   { label: "1–5", min: 1, max: 5 },
   { label: "6–15", min: 6, max: 15 },
@@ -29,7 +49,7 @@ const PROMPT_RANGES: RangeOption[] = [
   { label: "51+", min: 51 },
 ];
 
-const PEAK_CTX_RANGES: RangeOption[] = [
+const PEAK_CTX_RANGES: IRangeOption[] = [
   { label: "Any", includeNull: true },
   { label: "No data", nullOnly: true },
   { label: "0–10%", min: 0, max: 10 },
@@ -38,7 +58,7 @@ const PEAK_CTX_RANGES: RangeOption[] = [
   { label: "60%+", min: 60 },
 ];
 
-const CONTEXT_RANGES: RangeOption[] = [
+const CONTEXT_RANGES: IRangeOption[] = [
   { label: "Any", includeNull: true },
   { label: "<10K", min: 0, max: 10_000 },
   { label: "10K–100K", min: 10_000, max: 100_000 },
@@ -46,7 +66,7 @@ const CONTEXT_RANGES: RangeOption[] = [
   { label: "500K+", min: 500_000 },
 ];
 
-const COST_RANGES: RangeOption[] = [
+const COST_RANGES: IRangeOption[] = [
   { label: "Any", includeNull: true },
   { label: "No data", nullOnly: true },
   { label: "<$0.10", min: 0, max: 0.1 },
@@ -55,7 +75,7 @@ const COST_RANGES: RangeOption[] = [
   { label: "$5+", min: 5 },
 ];
 
-const SCORE_RANGES: RangeOption[] = [
+const SCORE_RANGES: IRangeOption[] = [
   { label: "Any", includeNull: true },
   { label: "A  90+", min: 90 },
   { label: "B  80–89", min: 80, max: 89 },
@@ -64,7 +84,7 @@ const SCORE_RANGES: RangeOption[] = [
   { label: "F  <50", min: 0, max: 49 },
 ];
 
-function matchesRange(value: number | null, opt: RangeOption): boolean {
+function matchesRange(value: number | null, opt: IRangeOption): boolean {
   if (opt.includeNull) return true;
   if (opt.nullOnly) return value === null;
   if (value === null) return false;
@@ -75,10 +95,11 @@ function matchesRange(value: number | null, opt: RangeOption): boolean {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FilterKey = "prompts" | "peakCtx" | "context" | "cost" | "score";
+type TFilterKey = "prompts" | "peakCtx" | "context" | "cost" | "score";
 
-type SortKey =
+type TSortKey =
   | "endedAt"
+  | "duration"
   | "promptCount"
   | "inputTokens"
   | "outputTokens"
@@ -87,9 +108,10 @@ type SortKey =
   | "knownCostUsd"
   | "score";
 
-const COLUMN_CONFIG: { label: string; sortKey: SortKey | null }[] = [
+const COLUMN_CONFIG: { label: string; sortKey: TSortKey | null }[] = [
   { label: "When", sortKey: "endedAt" },
   { label: "Project", sortKey: null },
+  { label: "Duration", sortKey: "duration" },
   { label: "Prompts", sortKey: "promptCount" },
   { label: "Input", sortKey: "inputTokens" },
   { label: "Output", sortKey: "outputTokens" },
@@ -100,9 +122,9 @@ const COLUMN_CONFIG: { label: string; sortKey: SortKey | null }[] = [
 ];
 
 const FILTER_CONFIG: {
-  key: FilterKey;
+  key: TFilterKey;
   label: string;
-  ranges: RangeOption[];
+  ranges: IRangeOption[];
 }[] = [
   { key: "prompts", label: "Prompts", ranges: PROMPT_RANGES },
   { key: "peakCtx", label: "Peak Ctx", ranges: PEAK_CTX_RANGES },
@@ -111,8 +133,8 @@ const FILTER_CONFIG: {
   { key: "score", label: "Approx. Score", ranges: SCORE_RANGES },
 ];
 
-export interface SessionsTableProps {
-  sessions: SessionMetrics[];
+export interface ISessionsTableProps {
+  sessions: ISessionMetrics[];
   formatNumber: (value: number) => string;
   formatCurrency: (value: number | null) => string;
   formatDate: (value: number | null) => string;
@@ -127,7 +149,7 @@ export function SessionsTable({
   formatCurrency,
   formatDate,
   shortProject,
-}: SessionsTableProps) {
+}: ISessionsTableProps) {
   const MIN_DETAILS_LOADING_MS = 2000;
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -135,20 +157,20 @@ export function SessionsTable({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
-  const [selectedSession, setSelectedSession] = useState<SessionMetrics | null>(
+  const [selectedSession, setSelectedSession] = useState<ISessionMetrics | null>(
     null,
   );
   const [projectLogDetails, setProjectLogDetails] =
-    useState<SessionProjectLogDetails | null>(null);
+    useState<ISessionProjectLogDetails | null>(null);
   const detailsRequestIdRef = useRef(0);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const [sortKey, setSortKey] = useState<SortKey>("endedAt");
+  const [sortKey, setSortKey] = useState<TSortKey>("endedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const [activeFilters, setActiveFilters] = useState<Record<FilterKey, number>>(
+  const [activeFilters, setActiveFilters] = useState<Record<TFilterKey, number>>(
     {
       prompts: 0,
       peakCtx: 0,
@@ -191,14 +213,23 @@ export function SessionsTable({
 
   const sortedSessions = useMemo(() => {
     return [...filteredSessions].sort((a, b) => {
+      const sessionDurationMs = (s: ISessionMetrics) =>
+        s.startedAt !== null && s.endedAt !== null
+          ? s.endedAt - s.startedAt
+          : null;
+
       const aVal =
         sortKey === "score"
           ? (sessionScores.get(a.sessionId)?.total ?? null)
-          : (a[sortKey] as number | null);
+          : sortKey === "duration"
+            ? sessionDurationMs(a)
+            : (a[sortKey] as number | null);
       const bVal =
         sortKey === "score"
           ? (sessionScores.get(b.sessionId)?.total ?? null)
-          : (b[sortKey] as number | null);
+          : sortKey === "duration"
+            ? sessionDurationMs(b)
+            : (b[sortKey] as number | null);
 
       if (aVal === null && bVal === null) return 0;
       if (aVal === null) return 1;
@@ -216,7 +247,7 @@ export function SessionsTable({
     return sortedSessions.slice(start, start + pageSize);
   }, [currentPage, pageSize, sortedSessions]);
 
-  function setFilter(key: FilterKey, idx: number) {
+  function setFilter(key: TFilterKey, idx: number) {
     setActiveFilters((prev) => ({ ...prev, [key]: idx }));
     setPage(1);
   }
@@ -226,7 +257,7 @@ export function SessionsTable({
     setPage(1);
   }
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: TSortKey) {
     if (key === sortKey) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -241,8 +272,8 @@ export function SessionsTable({
   // ─── Session detail fetch ──────────────────────────────────────────────────
 
   async function fetchProjectLogDetails(
-    session: SessionMetrics,
-  ): Promise<SessionProjectLogDetails> {
+    session: ISessionMetrics,
+  ): Promise<ISessionProjectLogDetails> {
     try {
       const query = new URLSearchParams({
         sessionId: session.sessionId,
@@ -283,7 +314,7 @@ export function SessionsTable({
         );
       }
 
-      return (await response.json()) as SessionProjectLogDetails;
+      return (await response.json()) as ISessionProjectLogDetails;
     } catch (error) {
       return {
         status: "error",
@@ -501,7 +532,7 @@ export function SessionsTable({
             {pagedSessions.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-2 py-6 text-center text-sm text-gray-500"
                 >
                   No sessions match the current filters.
@@ -524,6 +555,9 @@ export function SessionsTable({
                       title={session.projectPath}
                     >
                       {shortProject(session.projectPath)}
+                    </td>
+                    <td className="border-b border-gray-700 px-2 py-2 text-gray-400 tabular-nums">
+                      {formatSessionDuration(session.startedAt, session.endedAt)}
                     </td>
                     <td className="border-b border-gray-700 px-2 py-2 text-gray-100">
                       {formatNumber(session.promptCount)}

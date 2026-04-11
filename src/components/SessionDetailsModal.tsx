@@ -1,36 +1,56 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
-import type { SessionMetrics, SessionProjectLogDetails } from '../types';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import duration from 'dayjs/plugin/duration';
+import type { ISessionMetrics, ISessionProjectLogDetails } from '../types';
 import { computeEfficiencyScore, gradeClasses, bandClasses, gradeToDeltaType } from '../lib/efficiency';
-import type { MetricScore } from '../lib/efficiency';
+import type { IMetricScore } from '../lib/efficiency';
 import { BadgeDelta } from './ui/badge-delta';
 
-function formatDuration(durationMs: number | null): string {
-  if (durationMs === null) return 'N/A';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+dayjs.extend(utc);
+dayjs.extend(duration);
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return 'N/A';
+  if (ms < 1000) return `${ms}ms`;
+  const d = dayjs.duration(ms);
+  const h = Math.floor(d.asHours());
+  const m = d.minutes();
+  const s = d.seconds();
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
-type SessionDetailsModalProps = {
+function sessionDuration(startedAt: number | null, endedAt: number | null): string {
+  if (startedAt === null || endedAt === null) return 'N/A';
+  const ms = endedAt - startedAt;
+  return ms < 0 ? 'N/A' : formatDuration(ms);
+}
+
+function tokensPerMin(startedAt: number | null, endedAt: number | null, tokens: number): string {
+  if (startedAt === null || endedAt === null) return 'N/A';
+  const ms = endedAt - startedAt;
+  if (ms <= 0) return 'N/A';
+  const rate = Math.round(tokens / (ms / 60_000));
+  return `${new Intl.NumberFormat().format(rate)} tok/min`;
+}
+
+type TSessionDetailsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   loading: boolean;
   error: string | null;
   selectedSessionId: string | null;
-  selectedSession: SessionMetrics | null;
-  projectLogDetails: SessionProjectLogDetails | null;
+  selectedSession: ISessionMetrics | null;
+  projectLogDetails: ISessionProjectLogDetails | null;
   formatNumber: (value: number) => string;
   formatCurrency: (value: number | null) => string;
   formatDate: (value: number | null) => string;
 };
 
-function MetricTile({ metric }: { metric: MetricScore }) {
+function MetricTile({ metric }: { metric: IMetricScore }) {
   const { dot, scoreText } = bandClasses(metric.band);
   return (
     <div className="rounded-lg bg-gray-900/70 p-2.5" title={metric.description}>
@@ -59,8 +79,8 @@ function EfficiencyPanel({
   session,
   logDetails,
 }: {
-  session: SessionMetrics;
-  logDetails: SessionProjectLogDetails | null;
+  session: ISessionMetrics;
+  logDetails: ISessionProjectLogDetails | null;
 }) {
   const eff = computeEfficiencyScore(session, logDetails);
   const gc = gradeClasses(eff.grade);
@@ -128,7 +148,7 @@ export function SessionDetailsModal({
   formatNumber,
   formatCurrency,
   formatDate,
-}: SessionDetailsModalProps) {
+}: TSessionDetailsModalProps) {
   useEffect(() => {
     if (!isOpen) return;
 
@@ -229,6 +249,18 @@ export function SessionDetailsModal({
                   <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
                     <div className="text-xs uppercase tracking-wide text-gray-400">Ended</div>
                     <div className="mt-1 text-sm text-gray-100">{formatDate(selectedSession.endedAt)}</div>
+                  </div>
+                  <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
+                    <div className="text-xs uppercase tracking-wide text-gray-400">Session Duration</div>
+                    <div className="mt-1 text-sm font-semibold text-gray-100 tabular-nums">
+                      {sessionDuration(selectedSession.startedAt, selectedSession.endedAt)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
+                    <div className="text-xs uppercase tracking-wide text-gray-400">Token Rate</div>
+                    <div className="mt-1 text-sm font-semibold text-gray-100 tabular-nums">
+                      {tokensPerMin(selectedSession.startedAt, selectedSession.endedAt, selectedSession.outputTokens)}
+                    </div>
                   </div>
                   <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
                     <div className="text-xs uppercase tracking-wide text-gray-400">Session Type</div>

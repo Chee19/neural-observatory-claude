@@ -1,8 +1,8 @@
-import type { SessionMetrics, SessionProjectLogDetails } from "../types";
+import type { ISessionMetrics, ISessionProjectLogDetails } from "../types";
 
-export type ScoreBand = "excellent" | "good" | "fair" | "poor";
+export type TScoreBand = "excellent" | "good" | "fair" | "poor";
 
-export interface MetricScore {
+export interface IMetricScore {
   key: string;
   label: string;
   description: string;
@@ -10,16 +10,16 @@ export interface MetricScore {
   rawDisplay: string;
   score: number; // 0–100
   weight: number; // nominal weight before redistribution
-  band: ScoreBand;
+  band: TScoreBand;
   available: boolean;
   requiresLogData: boolean;
 }
 
-export interface EfficiencyScore {
+export interface IEfficiencyScore {
   total: number; // 0–100 weighted average
   grade: string; // A+, A, B+, B, C+, C, D, F
   label: string; // Exceptional, Excellent, ...
-  metrics: MetricScore[];
+  metrics: IMetricScore[];
   hasLogData: boolean;
   isSubagent: boolean;
 }
@@ -45,7 +45,7 @@ function piecewise(value: number, pts: [number, number][]): number {
   return 0;
 }
 
-function toBand(score: number): ScoreBand {
+function toBand(score: number): TScoreBand {
   if (score >= 90) return "excellent";
   if (score >= 70) return "good";
   if (score >= 40) return "fair";
@@ -65,7 +65,7 @@ function toGrade(total: number): { grade: string; label: string } {
 
 // ─── Core metrics (always available from SessionMetrics) ─────────────────────
 
-function scoreCacheHit(s: SessionMetrics): MetricScore {
+function scoreCacheHit(s: ISessionMetrics): IMetricScore {
   // Denominator is only (directInput + cacheRead) — cacheWrite is excluded per algorithm
   const denom = s.inputTokens + s.cacheReadTokens;
   const avail = denom > 0;
@@ -95,7 +95,7 @@ function scoreCacheHit(s: SessionMetrics): MetricScore {
   };
 }
 
-function scoreOutputLeverage(s: SessionMetrics): MetricScore {
+function scoreOutputLeverage(s: ISessionMetrics): IMetricScore {
   // Denominator is totalNewContext = directInput + cacheWrite (not directInput alone)
   const newContext = s.inputTokens + s.cacheCreationTokens;
   const avail = newContext > 0;
@@ -126,7 +126,7 @@ function scoreOutputLeverage(s: SessionMetrics): MetricScore {
   };
 }
 
-function scoreContextEfficiency(s: SessionMetrics): MetricScore {
+function scoreContextEfficiency(s: ISessionMetrics): IMetricScore {
   const avail = s.peakContextPct !== null;
   const raw = s.peakContextPct;
   const score = avail
@@ -157,7 +157,7 @@ function scoreContextEfficiency(s: SessionMetrics): MetricScore {
   };
 }
 
-function scoreTurnsRatio(s: SessionMetrics): MetricScore {
+function scoreTurnsRatio(s: ISessionMetrics): IMetricScore {
   const avail = s.promptCount > 0;
   const raw = avail ? s.assistantTurns / s.promptCount : null;
   const score = avail
@@ -185,7 +185,7 @@ function scoreTurnsRatio(s: SessionMetrics): MetricScore {
   };
 }
 
-function scorePromptDepth(s: SessionMetrics): MetricScore {
+function scorePromptDepth(s: ISessionMetrics): IMetricScore {
   // Use totalNewContext per prompt (directInput + cacheWrite), not directInput alone
   const avail = s.promptCount > 0;
   const raw = avail ? (s.inputTokens + s.cacheCreationTokens) / s.promptCount : null;
@@ -218,8 +218,8 @@ function scorePromptDepth(s: SessionMetrics): MetricScore {
 // ─── Extended metrics (require ProjectLogDetails status === 'ok') ─────────────
 
 function scoreToolDensity(
-  log: SessionProjectLogDetails | null | undefined,
-): MetricScore {
+  log: ISessionProjectLogDetails | null | undefined,
+): IMetricScore {
   const logOk = log?.status === "ok";
   const avail = logOk && (log?.assistantMessageCount ?? 0) > 0;
   const raw = avail ? log!.toolUseCount / log!.assistantMessageCount : null;
@@ -250,8 +250,8 @@ function scoreToolDensity(
 }
 
 function scoreActionRatio(
-  log: SessionProjectLogDetails | null | undefined,
-): MetricScore {
+  log: ISessionProjectLogDetails | null | undefined,
+): IMetricScore {
   const logOk = log?.status === "ok";
   const hasCounts = logOk && (log?.toolCounts?.length ?? 0) > 0;
 
@@ -260,7 +260,7 @@ function scoreActionRatio(
     rawDisplay: string,
     score: number,
     avail: boolean,
-  ): MetricScore => ({
+  ): IMetricScore => ({
     key: "actionRatio",
     label: "Action Ratio",
     description:
@@ -297,8 +297,8 @@ function scoreActionRatio(
 }
 
 function scoreToolCompletion(
-  log: SessionProjectLogDetails | null | undefined,
-): MetricScore {
+  log: ISessionProjectLogDetails | null | undefined,
+): IMetricScore {
   const logOk = log?.status === "ok";
   const avail = logOk && (log?.toolUseCount ?? 0) > 0;
   const raw = avail
@@ -332,8 +332,8 @@ function scoreToolCompletion(
 }
 
 function scoreVerificationFlag(
-  log: SessionProjectLogDetails | null | undefined,
-): MetricScore {
+  log: ISessionProjectLogDetails | null | undefined,
+): IMetricScore {
   const logOk = log?.status === "ok";
   const hasCounts = logOk && (log?.toolCounts?.length ?? 0) > 0;
 
@@ -342,7 +342,7 @@ function scoreVerificationFlag(
     rawDisplay: string,
     score: number,
     avail: boolean,
-  ): MetricScore => ({
+  ): IMetricScore => ({
     key: "verificationFlag",
     label: "Verified",
     description:
@@ -379,13 +379,13 @@ function scoreVerificationFlag(
 // ─── Main API ─────────────────────────────────────────────────────────────────
 
 export function computeEfficiencyScore(
-  session: SessionMetrics,
-  logDetails?: SessionProjectLogDetails | null,
-): EfficiencyScore {
+  session: ISessionMetrics,
+  logDetails?: ISessionProjectLogDetails | null,
+): IEfficiencyScore {
   const hasLogData = logDetails?.status === "ok";
   const log = hasLogData ? logDetails : null;
 
-  const metrics: MetricScore[] = [
+  const metrics: IMetricScore[] = [
     // Core (always)
     scoreCacheHit(session),
     scoreOutputLeverage(session),
@@ -475,7 +475,7 @@ export function gradeToDeltaType(
   else return "decrease";
 }
 
-export function bandClasses(band: ScoreBand): {
+export function bandClasses(band: TScoreBand): {
   dot: string;
   scoreText: string;
 } {

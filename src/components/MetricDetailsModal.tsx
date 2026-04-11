@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
-import type { MetricBreakdownItem } from '../types';
+import type { IMetricBreakdownItem } from '../types';
 
-export interface MetricDetailsModalProps {
+export interface IMetricDetailsModalProps {
   isOpen: boolean;
   title: string;
   subtitle: string;
   totalLabel: string;
   totalValue: string;
-  items: MetricBreakdownItem[];
+  items: IMetricBreakdownItem[];
   onClose: () => void;
 }
 
@@ -19,7 +19,7 @@ export function MetricDetailsModal({
   totalValue,
   items,
   onClose,
-}: MetricDetailsModalProps) {
+}: IMetricDetailsModalProps) {
   useEffect(() => {
     if (!isOpen) return;
 

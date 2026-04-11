@@ -7,7 +7,7 @@ import { loadSlim } from '@tsparticles/slim';
 import { cn } from '@/lib/utils';
 import { motion, useAnimation } from 'framer-motion';
 
-type ParticlesProps = {
+type TParticlesProps = {
   id?: string;
   className?: string;
   background?: string;
@@ -19,7 +19,7 @@ type ParticlesProps = {
   particleDensity?: number;
 };
 
-export const SparklesCore = (props: ParticlesProps) => {
+export const SparklesCore = (props: TParticlesProps) => {
   const {
     id,
     className,

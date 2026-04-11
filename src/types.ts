@@ -1,4 +1,4 @@
-export interface ModelBreakdown {
+export interface IModelBreakdown {
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -7,7 +7,7 @@ export interface ModelBreakdown {
   totalContextTokens: number;
 }
 
-export interface SessionMetrics {
+export interface ISessionMetrics {
   sessionId: string;
   projectPath: string;
   startedAt: number | null;
@@ -22,17 +22,17 @@ export interface SessionMetrics {
   webSearchRequests: number;
   knownCostUsd: number | null;
   peakContextPct: number | null;
-  modelBreakdown: ModelBreakdown[];
+  modelBreakdown: IModelBreakdown[];
   sourceFiles: number;
   isSubagent: boolean;
 }
 
-export interface SessionDetailToolCount {
+export interface ISessionDetailToolCount {
   name: string;
   count: number;
 }
 
-export interface SessionDetailModelUsage {
+export interface ISessionDetailModelUsage {
   model: string;
   turns: number;
   inputTokens: number;
@@ -43,7 +43,7 @@ export interface SessionDetailModelUsage {
   webSearchRequests: number;
 }
 
-export interface SessionProjectLogDetails {
+export interface ISessionProjectLogDetails {
   status:
     | 'ok'
     | 'no_project_path'
@@ -81,11 +81,11 @@ export interface SessionProjectLogDetails {
   scannedFileLimitHit: boolean;
   matchedFiles: string[];
   models: string[];
-  modelUsage: SessionDetailModelUsage[];
-  toolCounts: SessionDetailToolCount[];
+  modelUsage: ISessionDetailModelUsage[];
+  toolCounts: ISessionDetailToolCount[];
 }
 
-export interface CumulativeMetrics {
+export interface ICumulativeMetrics {
   sessions: number;
   prompts: number;
   assistantTurns: number;
@@ -98,13 +98,13 @@ export interface CumulativeMetrics {
   knownCostCoveragePct: number;
 }
 
-export interface ParseResult {
-  sessions: SessionMetrics[];
-  cumulative: CumulativeMetrics;
+export interface IParseResult {
+  sessions: ISessionMetrics[];
+  cumulative: ICumulativeMetrics;
   warnings: string[];
 }
 
-export interface AllTimeInsights {
+export interface IAllTimeInsights {
   totalSessions: number;
   subagentSessions: number;
   uniqueSubagents: number;
@@ -112,19 +112,19 @@ export interface AllTimeInsights {
   skillMentions: number;
   toolInvocations: number;
   assistantTurns: number;
-  toolBreakdown: MetricBreakdownItem[];
-  agentBreakdown: MetricBreakdownItem[];
-  subagentBreakdown: MetricBreakdownItem[];
-  skillBreakdown: MetricBreakdownItem[];
+  toolBreakdown: IMetricBreakdownItem[];
+  agentBreakdown: IMetricBreakdownItem[];
+  subagentBreakdown: IMetricBreakdownItem[];
+  skillBreakdown: IMetricBreakdownItem[];
 }
 
-export interface MetricBreakdownItem {
+export interface IMetricBreakdownItem {
   name: string;
   count: number;
   pct: number;
 }
 
-export interface ClaudeInventory {
+export interface IClaudeInventory {
   agents: number;
   skills: number;
   plugins: number;
@@ -133,10 +133,10 @@ export interface ClaudeInventory {
   trackedFiles: number;
 }
 
-export interface ApiMetricsResponse extends ParseResult {
+export interface IApiMetricsResponse extends IParseResult {
   sourcePath: string;
   generatedAt: string;
   readOnlyMode: true;
-  allTime: AllTimeInsights;
-  inventory: ClaudeInventory;
+  allTime: IAllTimeInsights;
+  inventory: IClaudeInventory;
 }

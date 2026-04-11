@@ -24,49 +24,49 @@ const DEFAULT_MAGNIFICATION = 80;
 const DEFAULT_DISTANCE = 150;
 const DEFAULT_PANEL_SIZE = 64;
 
-type DockOrientation = 'horizontal' | 'vertical';
+type TDockOrientation = 'horizontal' | 'vertical';
 
-type DockProps = {
+type TDockProps = {
   children: React.ReactNode;
   className?: string;
   distance?: number;
   panelSize?: number;
   magnification?: number;
   spring?: SpringOptions;
-  orientation?: DockOrientation;
+  orientation?: TDockOrientation;
 };
 
-type DockItemProps = {
+type TDockItemProps = {
   className?: string;
   children: React.ReactNode;
 };
 
-type DockLabelProps = {
+type TDockLabelProps = {
   className?: string;
   children: React.ReactNode;
 };
 
-type DockIconProps = {
+type TDockIconProps = {
   className?: string;
   children: React.ReactNode;
 };
 
-type DockContextType = {
+type TDockContextType = {
   mouse: MotionValue<number>;
   spring: SpringOptions;
   magnification: number;
   distance: number;
-  orientation: DockOrientation;
+  orientation: TDockOrientation;
 };
 
-type DockProviderProps = {
+type TDockProviderProps = {
   children: React.ReactNode;
-  value: DockContextType;
+  value: TDockContextType;
 };
 
-const DockContext = createContext<DockContextType | undefined>(undefined);
+const DockContext = createContext<TDockContextType | undefined>(undefined);
 
-function DockProvider({ children, value }: DockProviderProps) {
+function DockProvider({ children, value }: TDockProviderProps) {
   return <DockContext.Provider value={value}>{children}</DockContext.Provider>;
 }
 
@@ -86,7 +86,7 @@ function Dock({
   distance = DEFAULT_DISTANCE,
   panelSize = DEFAULT_PANEL_SIZE,
   orientation = 'horizontal',
-}: DockProps) {
+}: TDockProps) {
   const mouse = useMotionValue(Infinity);
   const isHovered = useMotionValue(0);
 
@@ -139,7 +139,7 @@ function Dock({
   );
 }
 
-function DockItem({ children, className }: DockItemProps) {
+function DockItem({ children, className }: TDockItemProps) {
   const ref = useRef<HTMLDivElement>(null);
   const { distance, magnification, mouse, spring, orientation } = useDock();
   const isHovered = useMotionValue(0);
@@ -188,10 +188,10 @@ function DockItem({ children, className }: DockItemProps) {
   );
 }
 
-function DockLabel({ children, className, ...rest }: DockLabelProps) {
+function DockLabel({ children, className, ...rest }: TDockLabelProps) {
   const restProps = rest as Record<string, unknown>;
   const isHovered = restProps['isHovered'] as MotionValue<number>;
-  const orientation = (restProps['orientation'] as DockOrientation | undefined) ?? 'horizontal';
+  const orientation = (restProps['orientation'] as TDockOrientation | undefined) ?? 'horizontal';
   const [isVisible, setIsVisible] = useState(false);
   const isVertical = orientation === 'vertical';
 
@@ -226,7 +226,7 @@ function DockLabel({ children, className, ...rest }: DockLabelProps) {
   );
 }
 
-function DockIcon({ children, className, ...rest }: DockIconProps) {
+function DockIcon({ children, className, ...rest }: TDockIconProps) {
   const restProps = rest as Record<string, unknown>;
   const size =
     (restProps['size'] as MotionValue<number> | undefined)

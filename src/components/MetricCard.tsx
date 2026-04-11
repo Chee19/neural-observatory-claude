@@ -9,7 +9,7 @@ function valueTextSize(value: string): string {
   return 'text-sm md:text-base';
 }
 
-export interface MetricCardProps {
+export interface IMetricCardProps {
   label: string;
   value: string;
   hint?: string;
@@ -17,7 +17,7 @@ export interface MetricCardProps {
   right?: ReactNode;
 }
 
-export function MetricCard({ label, value, hint, onClick, right }: MetricCardProps) {
+export function MetricCard({ label, value, hint, onClick, right }: IMetricCardProps) {
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">

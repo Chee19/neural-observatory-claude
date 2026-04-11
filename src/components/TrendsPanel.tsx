@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, Bar, BarChart } from 'recharts';
-import type { SessionMetrics } from '../types';
+import type { ISessionMetrics } from '../types';
 import {
   Card,
   CardContent,
@@ -12,16 +12,16 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
+  type TChartConfig,
 } from '@/components/ui/chart';
 
-export interface TrendsPanelProps {
-  sessions: SessionMetrics[];
+export interface ITrendsPanelProps {
+  sessions: ISessionMetrics[];
   formatNumber: (value: number) => string;
   formatCompactKM: (value: number) => string;
 }
 
-type TrendMode = 'sessions_24' | 'hours_24' | 'days_7';
+type TTrendMode = 'sessions_24' | 'hours_24' | 'days_7';
 
 function formatTime24(value: number): string {
   return new Date(value).toLocaleTimeString([], {
@@ -36,17 +36,17 @@ const lineChartConfig = {
     label: 'Context Tokens',
     color: '#34d399',
   },
-} satisfies ChartConfig;
+} satisfies TChartConfig;
 
 const barChartConfig = {
   total: {
     label: 'Context Tokens',
     color: '#34d399',
   },
-} satisfies ChartConfig;
+} satisfies TChartConfig;
 
-export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: TrendsPanelProps) {
-  const [mode, setMode] = useState<TrendMode>('sessions_24');
+export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: ITrendsPanelProps) {
+  const [mode, setMode] = useState<TTrendMode>('sessions_24');
 
   const points = useMemo(() => {
     if (mode === 'sessions_24') {
@@ -144,7 +144,7 @@ export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: TrendsP
     [points],
   );
 
-  const modeLabels: Record<TrendMode, { title: string; description: string }> = {
+  const modeLabels: Record<TTrendMode, { title: string; description: string }> = {
     sessions_24: {
       title: 'Last 24 Sessions',
       description: 'Context tokens per session',
@@ -169,7 +169,7 @@ export function TrendsPanel({ sessions, formatNumber, formatCompactKM }: TrendsP
             <CardDescription>{modeLabels[mode].description}</CardDescription>
           </div>
           <div className="flex">
-            {(['sessions_24', 'hours_24', 'days_7'] as TrendMode[]).map((key) => (
+            {(['sessions_24', 'hours_24', 'days_7'] as TTrendMode[]).map((key) => (
               <button
                 key={key}
                 type="button"

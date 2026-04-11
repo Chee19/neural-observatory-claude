@@ -98,7 +98,7 @@ function _injectGlowStyles() {
   document.head.appendChild(style);
 }
 
-interface GlowCardProps extends HTMLAttributes<HTMLDivElement> {
+interface IGlowCardProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
   glowColor?: 'blue' | 'purple' | 'green' | 'red' | 'orange';
   size?: 'sm' | 'md' | 'lg';
@@ -121,9 +121,9 @@ const sizeMap = {
   lg: 'w-80 h-96',
 } as const;
 
-type GlowStyle = CSSProperties & Record<`--${string}`, string>;
+type TGlowStyle = CSSProperties & Record<`--${string}`, string>;
 
-const GlowCard: React.FC<GlowCardProps> = ({
+const GlowCard: React.FC<IGlowCardProps> = ({
   children,
   className = '',
   glowColor = 'blue',
@@ -155,8 +155,8 @@ const GlowCard: React.FC<GlowCardProps> = ({
     return sizeMap[size];
   };
 
-  const getInlineStyles = (): GlowStyle => {
-    const baseStyles: GlowStyle = {
+  const getInlineStyles = (): TGlowStyle => {
+    const baseStyles: TGlowStyle = {
       '--base': String(base),
       '--spread': String(spread),
       '--radius': '14',
@@ -194,7 +194,7 @@ const GlowCard: React.FC<GlowCardProps> = ({
     return baseStyles;
   };
 
-  const mergedStyles: GlowStyle = {
+  const mergedStyles: TGlowStyle = {
     ...getInlineStyles(),
     ...(style ?? {}),
   };

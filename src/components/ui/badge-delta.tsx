@@ -84,7 +84,7 @@ const badgeDeltaVariants = cva(
   },
 );
 
-interface BadgeDeltaProps
+interface IBadgeDeltaProps
   extends
     React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeDeltaVariants> {
@@ -120,7 +120,7 @@ export function BadgeDelta({
   iconStyle = "line",
   value,
   ...props
-}: BadgeDeltaProps) {
+}: IBadgeDeltaProps) {
   if (!deltaType || !VALID_DELTA_TYPES.has(deltaType)) return null;
   if (variant === "complex") {
     return (

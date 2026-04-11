@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { MetricCard } from "../components/MetricCard";
 import { MetricDetailsModal } from "../components/MetricDetailsModal";
 import { SessionsTable } from "../components/SessionsTable";
 import { TrendsPanel } from "../components/TrendsPanel";
 import type {
-  ApiMetricsResponse,
-  MetricBreakdownItem,
-  SessionMetrics,
+  IApiMetricsResponse,
+  IMetricBreakdownItem,
+  ISessionMetrics,
 } from "../types";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { LeftNavigationDock } from "@/components/ui/navigation-dock";
@@ -25,9 +27,11 @@ function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
+dayjs.extend(utc);
+
 function formatDate(value: number | null): string {
   if (value === null) return "Unknown";
-  return new Date(value).toLocaleString();
+  return dayjs(value).utc().format("YYYY-MM-DD HH:mm:ss UTC");
 }
 
 function formatCompactKM(value: number): string {
@@ -45,9 +49,9 @@ function shortProject(value: string): string {
 }
 
 function splitBySessionType(
-  sessions: SessionMetrics[],
-  getValue: (session: SessionMetrics) => number,
-): MetricBreakdownItem[] {
+  sessions: ISessionMetrics[],
+  getValue: (session: ISessionMetrics) => number,
+): IMetricBreakdownItem[] {
   const regularTotal = sessions
     .filter((s) => !s.isSubagent)
     .reduce((acc, session) => acc + getValue(session), 0);
@@ -72,7 +76,7 @@ function splitBySessionType(
   ];
 }
 
-type AllTimeCardKey =
+type TAllTimeCardKey =
   | "sessions"
   | "prompts"
   | "assistantTurns"
@@ -87,14 +91,14 @@ type AllTimeCardKey =
   | "uniqueSubagents";
 
 function allTimeModalData(
-  key: AllTimeCardKey,
-  result: ApiMetricsResponse,
+  key: TAllTimeCardKey,
+  result: IApiMetricsResponse,
 ): {
   title: string;
   subtitle: string;
   totalLabel: string;
   totalValue: string;
-  items: MetricBreakdownItem[];
+  items: IMetricBreakdownItem[];
 } {
   const { allTime, cumulative, sessions } = result;
 
@@ -263,8 +267,8 @@ function MetricsGrid({ children }: { children: ReactNode }) {
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ApiMetricsResponse | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<AllTimeCardKey | null>(
+  const [result, setResult] = useState<IApiMetricsResponse | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<TAllTimeCardKey | null>(
     null,
   );
   const [inventoryExpanded, setInventoryExpanded] = useState(true);
@@ -286,7 +290,7 @@ export default function DashboardPage() {
     })
       .then((res) => {
         if (!res.ok) throw new Error(`API error: ${res.status}`);
-        return res.json() as Promise<ApiMetricsResponse>;
+        return res.json() as Promise<IApiMetricsResponse>;
       })
       .then((data) => {
         if (!controller.signal.aborted) {
@@ -364,7 +368,7 @@ export default function DashboardPage() {
         {result ? (
           <div className="mt-3 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300">
             Read-only mode: {String(result.readOnlyMode)} • Last updated:{" "}
-            {new Date(result.generatedAt).toLocaleString()}
+            {dayjs(result.generatedAt).utc().format("YYYY-MM-DD HH:mm:ss UTC")}
           </div>
         ) : null}
 
