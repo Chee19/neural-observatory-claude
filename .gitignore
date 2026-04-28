@@ -26,6 +26,7 @@ dist-ssr
 # Build files
 .dist
 .node_modules
+.worktrees
 
 # Dependencies
 yarn.lock
