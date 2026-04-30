@@ -1,120 +1,157 @@
-import http from 'node:http';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { loadClaudeMetrics, loadSessionProjectLogDetails } from './claudeMetrics.mjs';
+import http from "node:http";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { createClaudeMetricsService } from "./claudeMetrics.mjs";
+import { sendError, sendJson } from "./http.mjs";
 
 const PORT = Number(process.env.PORT || 4310);
-const DIST_DIR = path.resolve(process.cwd(), 'dist');
+const DIST_DIR = path.resolve(process.cwd(), "dist");
 
 const CONTENT_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".webp": "image/webp",
 };
 
-function sendJson(res, status, payload) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-  });
-  res.end(JSON.stringify(payload));
-}
-
-async function serveStatic(req, res, pathname) {
-  const urlPath = pathname === '/' ? '/index.html' : pathname;
-  const filePath = path.join(DIST_DIR, urlPath);
+async function serveStatic(res, distDir, pathname) {
+  const urlPath = pathname === "/" ? "/index.html" : pathname;
+  const filePath = path.join(distDir, urlPath);
 
   let real;
   try {
     real = await fs.realpath(filePath);
   } catch {
-    const fallback = path.join(DIST_DIR, 'index.html');
-    try {
-      const html = await fs.readFile(fallback);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
-    } catch {
-      sendJson(res, 500, { error: 'Build output not found. Run: npm run build' });
-    }
-    return;
+    return serveIndexFallback(res, distDir);
   }
 
-  if (!real.startsWith(DIST_DIR)) {
-    sendJson(res, 403, { error: 'Forbidden' });
+  if (!real.startsWith(distDir)) {
+    sendError(res, 403, "Forbidden");
     return;
   }
 
   try {
     const data = await fs.readFile(real);
     const ext = path.extname(real).toLowerCase();
-    const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
+    const contentType = CONTENT_TYPES[ext] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": contentType });
     res.end(data);
   } catch {
-    sendJson(res, 404, { error: 'Not found' });
+    sendError(res, 404, "Not found");
   }
 }
 
-const server = http.createServer(async (req, res) => {
-  if (!req.url) {
-    sendJson(res, 400, { error: 'Invalid request' });
-    return;
+async function serveIndexFallback(res, distDir) {
+  const fallback = path.join(distDir, "index.html");
+  try {
+    const html = await fs.readFile(fallback);
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(html);
+  } catch {
+    sendError(res, 500, "Build output not found. Run: npm run build");
   }
+}
 
-  const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+export function createRequestHandler({
+  distDir = DIST_DIR,
+  metricsService = createClaudeMetricsService(),
+} = {}) {
+  const routeHandlers = new Map([
+    [
+      "/api/metrics",
+      async (_requestUrl, _req, res) => {
+        try {
+          const result = await metricsService.loadMetrics();
+          sendJson(res, 200, result);
+        } catch (error) {
+          sendError(
+            res,
+            500,
+            "Failed to load .claude metrics",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    ],
+    [
+      "/api/session-details",
+      async (requestUrl, _req, res) => {
+        const sessionId = requestUrl.searchParams.get("sessionId") || "";
+        const projectPath = requestUrl.searchParams.get("projectPath") || "";
+        if (!sessionId) {
+          sendError(res, 400, "sessionId query parameter is required.");
+          return;
+        }
 
-  if (req.method && req.method !== 'GET') {
-    sendJson(res, 405, { error: 'Read-only server. Only GET is allowed.' });
-    return;
-  }
+        try {
+          const details = await metricsService.loadSessionProjectLogDetails(
+            sessionId,
+            projectPath,
+          );
+          sendJson(res, 200, details);
+        } catch (error) {
+          sendError(
+            res,
+            500,
+            "Failed to load session project log details",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    ],
+    [
+      "/api/health",
+      async (_requestUrl, _req, res) => {
+        const health = await metricsService.getHealth({ distDir });
+        sendJson(res, 200, health);
+      },
+    ],
+  ]);
 
-  if (requestUrl.pathname === '/api/metrics') {
-    try {
-      const result = await loadClaudeMetrics();
-      sendJson(res, 200, result);
-    } catch (error) {
-      sendJson(res, 500, {
-        error: 'Failed to load .claude metrics',
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return;
-  }
-
-  if (requestUrl.pathname === '/api/session-details' || requestUrl.pathname === '/api/session-details/') {
-    const sessionId = requestUrl.searchParams.get('sessionId') || '';
-    const projectPath = requestUrl.searchParams.get('projectPath') || '';
-    if (!sessionId) {
-      sendJson(res, 400, { error: 'sessionId query parameter is required.' });
+  return async function requestHandler(req, res) {
+    if (!req.url) {
+      sendError(res, 400, "Invalid request");
       return;
     }
 
-    try {
-      const details = await loadSessionProjectLogDetails(sessionId, projectPath);
-      sendJson(res, 200, details);
-    } catch (error) {
-      sendJson(res, 500, {
-        error: 'Failed to load session project log details',
-        detail: error instanceof Error ? error.message : String(error),
-      });
+    const requestUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+    if (req.method && req.method !== "GET") {
+      sendError(res, 405, "Read-only server. Only GET is allowed.");
+      return;
     }
-    return;
-  }
 
-  if (requestUrl.pathname === '/api/health') {
-    sendJson(res, 200, { ok: true, readOnlyMode: true });
-    return;
-  }
+    const routeHandler =
+      routeHandlers.get(requestUrl.pathname) ||
+      (requestUrl.pathname === "/api/session-details/"
+        ? routeHandlers.get("/api/session-details")
+        : undefined);
 
-  await serveStatic(req, res, requestUrl.pathname);
-});
+    if (routeHandler) {
+      await routeHandler(requestUrl, req, res);
+      return;
+    }
 
-server.listen(PORT, () => {
-  console.log(`Read-only Claude dashboard running at http://localhost:${PORT}`);
-});
+    await serveStatic(res, distDir, requestUrl.pathname);
+  };
+}
+
+export function createServer(options = {}) {
+  return http.createServer(createRequestHandler(options));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const server = createServer();
+  server.listen(PORT, () => {
+    console.log(`Read-only Claude dashboard running at http://localhost:${PORT}`);
+  });
+}

@@ -42,6 +42,24 @@ function formatCompactKM(value: number): string {
   return formatNumber(value);
 }
 
+function formatCacheAge(cacheAgeMs: number): string {
+  if (cacheAgeMs < 1_000) return `${cacheAgeMs}ms`;
+  const seconds = Math.round(cacheAgeMs / 1_000);
+  return `${seconds}s`;
+}
+
+function buildServerUnavailableMessage(error: string | null): string {
+  if (!error) {
+    return "Local server unavailable. Start the read-only server and try again.";
+  }
+
+  if (/fetch/i.test(error) || /network/i.test(error) || /Failed to fetch/i.test(error)) {
+    return "Local server unavailable. Start `npm run start` or `npm run dev`, then refresh the dashboard.";
+  }
+
+  return `Local server unavailable. ${error}`;
+}
+
 function shortProject(value: string): string {
   if (!value || value === "unknown") return "unknown";
   const parts = value.split("/").filter(Boolean);
@@ -268,6 +286,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IApiMetricsResponse | null>(null);
+  const [serverReachable, setServerReachable] = useState(true);
+  const [lastSuccessfulLoadAt, setLastSuccessfulLoadAt] = useState<string | null>(
+    null,
+  );
   const [selectedMetric, setSelectedMetric] = useState<TAllTimeCardKey | null>(
     null,
   );
@@ -281,33 +303,47 @@ export default function DashboardPage() {
   const tableSessions = viewSessions.length ? viewSessions : sessions;
   const latestSession = tableSessions[0] ?? null;
 
+  async function loadMetrics(options?: {
+    signal?: AbortSignal;
+    announceRequest?: boolean;
+  }) {
+    const { signal, announceRequest = false } = options ?? {};
+    if (announceRequest) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const res = await fetch("/api/metrics", {
+        method: "GET",
+        cache: "no-store",
+        signal,
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      const data = (await res.json()) as IApiMetricsResponse;
+      if (signal?.aborted) return;
+      setResult(data);
+      setServerReachable(true);
+      setLastSuccessfulLoadAt(new Date().toISOString());
+    } catch (err) {
+      if (signal?.aborted) return;
+      setServerReachable(false);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/metrics", {
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-        return res.json() as Promise<IApiMetricsResponse>;
-      })
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setResult(data);
-        }
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-
+    const timer = window.setTimeout(() => {
+      void loadMetrics({ signal: controller.signal });
+    }, 0);
     return () => {
+      window.clearTimeout(timer);
       controller.abort();
     };
   }, []);
@@ -356,7 +392,9 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              void loadMetrics({ announceRequest: true });
+            }}
             disabled={loading}
             className="w-full rounded-xl border border-emerald-400/30 bg-gradient-to-b from-emerald-500/20 to-gray-900/80 px-4 py-3 font-semibold text-emerald-100 shadow-[0_0_0_1px_rgba(16,185,129,0.12)] transition hover:-translate-y-px hover:border-emerald-300/50 hover:from-emerald-400/25 hover:to-gray-900/70 disabled:cursor-wait disabled:opacity-70 md:w-auto"
             type="button"
@@ -365,16 +403,72 @@ export default function DashboardPage() {
           </button>
         </section>
 
-        {result ? (
-          <div className="mt-3 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300">
-            Read-only mode: {String(result.readOnlyMode)} • Last updated:{" "}
-            {dayjs(result.generatedAt).utc().format("YYYY-MM-DD HH:mm:ss UTC")}
+        <section className="mt-3 rounded-xl border border-gray-700 bg-gray-900/90 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Local Server Status
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span
+                  className={
+                    serverReachable
+                      ? "rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-emerald-200"
+                      : "rounded-full border border-orange-400/30 bg-orange-500/10 px-2 py-1 text-orange-200"
+                  }
+                >
+                  {serverReachable ? "Reachable" : "Unavailable"}
+                </span>
+                {result ? (
+                  <span className="rounded-full border border-gray-700 px-2 py-1 text-gray-300">
+                    {result.meta.dataSource === "live"
+                      ? "Fresh server read"
+                      : `Memory cache (${formatCacheAge(result.meta.cacheAgeMs)} old)`}
+                  </span>
+                ) : null}
+                {result?.meta.status === "partial" ? (
+                  <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-amber-200">
+                    Partial dataset
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 text-sm text-gray-300 sm:grid-cols-3">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Last Successful Load
+                </div>
+                <div className="mt-1">
+                  {lastSuccessfulLoadAt
+                    ? dayjs(lastSuccessfulLoadAt).utc().format("YYYY-MM-DD HH:mm:ss UTC")
+                    : "No successful load yet"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Server Time
+                </div>
+                <div className="mt-1">
+                  {result
+                    ? dayjs(result.meta.serverTime).utc().format("YYYY-MM-DD HH:mm:ss UTC")
+                    : "Unavailable"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Read-only Mode
+                </div>
+                <div className="mt-1">
+                  {result ? String(result.readOnlyMode) : "Unavailable"}
+                </div>
+              </div>
+            </div>
           </div>
-        ) : null}
+        </section>
 
         {error ? (
-          <div className="mt-3 rounded-lg border border-orange-400 bg-orange-500 px-3 py-2 text-sm text-orange-200">
-            {error}
+          <div className="mt-3 rounded-lg border border-orange-400 bg-orange-500/15 px-3 py-3 text-sm text-orange-100">
+            {buildServerUnavailableMessage(error)}
           </div>
         ) : null}
 
@@ -572,16 +666,16 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* {result.warnings.length > 0 ? (
-            <section className="mt-4 rounded-xl border border-gray-700 bg-gray-800 p-4">
-              <h3 className="text-base font-semibold text-gray-100">Notes</h3>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-400">
-                {result.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </section>
-          ) : null} */}
+            {result.warnings.length > 0 ? (
+              <section className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
+                <h3 className="text-base font-semibold text-amber-100">Warnings</h3>
+                <ul className="mt-2 list-disc pl-5 text-sm text-amber-50/90">
+                  {result.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
             <div id="sessions-list" className="scroll-mt-4">
               <SessionsTable
@@ -607,9 +701,13 @@ export default function DashboardPage() {
           </>
         ) : (
           <section className="mt-4 rounded-xl border border-gray-700 bg-gray-800 p-4">
-            <h2 className="text-base font-semibold text-gray-100">Loading</h2>
+            <h2 className="text-base font-semibold text-gray-100">
+              {loading ? "Loading" : "Server Unavailable"}
+            </h2>
             <p className="text-sm text-gray-400">
-              Reading <code>~/.claude</code> from the local read-only API...
+              {loading
+                ? "Reading ~/.claude from the local read-only API..."
+                : "The installed app shell is available, but the local read-only server is not responding yet."}
             </p>
           </section>
         )}

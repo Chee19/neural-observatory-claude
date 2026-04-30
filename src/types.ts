@@ -43,10 +43,18 @@ export interface ISessionDetailModelUsage {
   webSearchRequests: number;
 }
 
+export interface IApiResponseMeta {
+  status: 'ok' | 'partial';
+  dataSource: 'live' | 'cache';
+  cacheAgeMs: number;
+  serverTime: string;
+}
+
 export interface ISessionProjectLogDetails {
   status:
     | 'ok'
     | 'no_project_path'
+    | 'invalid_project_path'
     | 'project_not_found'
     | 'project_not_directory'
     | 'no_logs'
@@ -83,6 +91,7 @@ export interface ISessionProjectLogDetails {
   models: string[];
   modelUsage: ISessionDetailModelUsage[];
   toolCounts: ISessionDetailToolCount[];
+  meta: IApiResponseMeta;
 }
 
 export interface ICumulativeMetrics {
@@ -139,4 +148,5 @@ export interface IApiMetricsResponse extends IParseResult {
   readOnlyMode: true;
   allTime: IAllTimeInsights;
   inventory: IClaudeInventory;
+  meta: IApiResponseMeta;
 }

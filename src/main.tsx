@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { install, observe } from '@twind/core';
 import presetTailwind from '@twind/preset-tailwind';
 import App from './App.tsx';
+import { registerServiceWorker } from './lib/registerServiceWorker.ts';
 
 const tw = install({
   presets: [presetTailwind()],
@@ -23,3 +24,5 @@ requestAnimationFrame(() => {
     if (loader) loader.classList.add('hidden');
   });
 });
+
+registerServiceWorker();

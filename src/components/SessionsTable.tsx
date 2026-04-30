@@ -352,6 +352,12 @@ export function SessionsTable({
         models: [],
         modelUsage: [],
         toolCounts: [],
+        meta: {
+          status: "ok",
+          dataSource: "live",
+          cacheAgeMs: 0,
+          serverTime: new Date().toISOString(),
+        },
       };
     }
   }
